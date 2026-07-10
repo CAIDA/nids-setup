@@ -4,6 +4,7 @@ Instructions for setting up and running NIDS ([CAIDA NIDS project](https://www.c
 
 ## Guides
 
-- [Namespace](docs/Namespace.md) — get access to NRP and request a namespace.
+- [NRP & Namespace](docs/NRP_Namespace.md) — get access to NRP and request a namespace.
+- [kubectl](docs/kubectl.md) — set up `kubectl` to work with your namespace.
 - [JupyterHub](docs/JupyterHub.md) — deploy your own JupyterHub in your namespace.
 

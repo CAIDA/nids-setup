@@ -1,10 +1,15 @@
+[NRP & Namespace](NRP_Namespace.md) | [kubectl](kubectl.md) | **JupyterHub**
+
+---
+
 # Running Your Own JupyterHub in Your NRP Namespace
 
 This guide walks through deploying a private JupyterHub into your own NRP Nautilus namespace via Helm, instead of using the public shared hub.
 
 ## Prerequisites
 
-- Completed [Namespace.md](Namespace.md) — you need an active namespace and `kubectl` pointed at it.
+- Completed [NRP & Namespace](NRP_Namespace.md) — you need an active namespace.
+- Completed [kubectl](kubectl.md) setup — `kubectl` pointed at your namespace.
 - [Helm](https://helm.sh/docs/intro/install/) installed locally.
 
 ## Step 1: Register a CILogon OAuth Client

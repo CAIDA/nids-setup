@@ -1,6 +1,10 @@
+**NRP & Namespace** | [kubectl](kubectl.md) | [JupyterHub](JupyterHub.md)
+
+---
+
 # Getting Access to NRP and Requesting a Namespace
 
-This guide walks through getting onboarded to the National Research Platform (NRP) Nautilus Kubernetes cluster and requesting your own namespace. Completing this is a prerequisite for [JupyterHub.md](JupyterHub.md).
+This guide walks through getting onboarded to the National Research Platform (NRP) Nautilus Kubernetes cluster and requesting your own namespace. It is the first step; next set up [kubectl](kubectl.md), then deploy [JupyterHub](JupyterHub.md).
 
 ## What is NRP / Nautilus?
 
@@ -18,21 +22,7 @@ The [National Research Platform (NRP)](https://nrp.ai/) operates **Nautilus**, a
 
 ## Step 2: Set Up `kubectl` Access
 
-1. From the portal, download your kubeconfig file.
-2. Merge or point `kubectl` at it, e.g.:
-
-   ```bash
-   export KUBECONFIG=~/Downloads/<your-downloaded-config>.yaml
-   ```
-
-3. Verify connectivity:
-
-   ```bash
-   kubectl get nodes
-   kubectl config get-contexts
-   ```
-
-See the [NRP Getting Started guide](https://nrp.ai/documentation/userdocs/start/getting-started/) for the full reference.
+Install and configure `kubectl` (plus the required `kubelogin` OIDC plugin) so it can talk to Nautilus. See the dedicated guide: [kubectl.md](kubectl.md).
 
 ## Step 3: Request a Namespace
 
@@ -62,4 +52,11 @@ If others need access to the same namespace, use the namespace membership manage
 
 ## Next
 
-Once your namespace is active, continue to [JupyterHub.md](JupyterHub.md) to deploy your own JupyterHub into it.
+Once your namespace is active, continue to [kubectl.md](kubectl.md) to set up `kubectl`, then [JupyterHub.md](JupyterHub.md) to deploy your own JupyterHub into it.
+
+## References
+
+- [NRP Documentation: Getting Started](https://nrp.ai/documentation/userdocs/start/getting-started/)
+- [NRP Portal](https://portal.nrp-nautilus.io)
+- [NRP Namespaces](https://nrp.ai/namespaces)
+- [CILogon](https://www.cilogon.org/)
