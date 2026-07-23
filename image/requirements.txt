@@ -1,0 +1,29 @@
+# Python dependencies for the combined NIDS JupyterHub image.
+#
+# This is the union of the three assignment key notebooks' actual imports:
+#   - nids-bgp-control-plane : pybgpkit-parser, pelicanfs, pytricia, pandas, matplotlib
+#   - nids-telescope-traffic : dpkt, pandas, pyarrow, pybgpkit-parser, pelicanfs,
+#                              pytricia, geoip2, maxminddb, matplotlib
+#   - nids-dns-ecosystem     : pyspark, tldextract, dnspython, numpy, requests, matplotlib
+#
+# Version specifiers below come from nids-telescope-traffic/.../requirements.txt
+# (the only assignment that pins). The rest are left unpinned to match the notebooks'
+# bare `%pip install`; pin them once versions are confirmed against a real run.
+
+# --- Telescope + BGP (pinned by the telescope assignment) ---
+dpkt>=1.9
+pandas>=2.0
+pyarrow>=14.0
+matplotlib>=3.5
+geoip2>=4.7
+maxminddb>=2.5
+pytricia>=1.0
+pelicanfs>=1.0
+pybgpkit-parser>=0.18   # import as `import pybgpkit_parser as bgpkit` (NOT `import bgpkit`)
+
+# --- DNS ecosystem ---
+pyspark
+tldextract
+dnspython               # import as `import dns.resolver`
+numpy
+requests
