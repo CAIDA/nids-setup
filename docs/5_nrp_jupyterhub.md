@@ -19,7 +19,7 @@ This pattern extends to additional NIDS assignments (e.g. `nids-asn-introduction
 - Completed [Install kubectl](1_kubectl_install.md) — `kubectl` and the `kubelogin` plugin installed.
 - Completed [NRP & Namespace](2_nrp_namespace.md) — you are **admin** of an active namespace.
 - Completed [Configure kubectl](3_kubectl_config.md) — `kubectl` pointed at your namespace.
-- Completed [NRP GitLab](4_nrp_gitlab.md) — the `nids-hub` image built and pushed to your registry.
+- Completed [NRP GitLab](4_nrp_gitlab.md) — the `nids-hub` image built by GitLab CI/CD and present in your registry.
 - [Helm](https://helm.sh/docs/intro/install/) installed locally.
 - A **CILogon OAuth application** registered at [https://cilogon.org/oauth2/register](https://cilogon.org/oauth2/register) with:
   - Callback URL `https://<HUB_HOST>.nrp-nautilus.io/hub/oauth_callback`
@@ -46,11 +46,11 @@ Start from the annotated template at [configs/values.yaml](../configs/values.yam
 - **`hub.config`** — the CILogon authenticator (client ID/secret, callback, scopes from the Prerequisites) plus the **auth lockdown** (`allowed_idps` + `allowed_domains`, and/or an `allowed_users` roster) and `admin_users`.
 - **`cull`** — the mandatory idle-culling policy (see [Mandatory cluster policy](#mandatory-cluster-policy)).
 - **`proxy` / `ingress`** — your hostname and TLS (NRP `cert-manager`).
-- **`singleuser.image`** — the image you pushed in [NRP GitLab](4_nrp_gitlab.md).
+- **`singleuser.image`** — the image the pipeline published in [NRP GitLab](4_nrp_gitlab.md). Pin `tag` to the build's short SHA rather than `latest` when you want a rollout you can verify.
 - **`singleuser.profileList`** — the three assignment profiles (see [Spawner profiles](#spawner-profiles)).
 - **`singleuser.storage`** — optional shared dataset volume (see [Shared storage](#shared-storage)).
 
-> **Never commit the client secret.** Keep it in an uncommitted override (`helm ... -f configs/values.yaml -f secrets.values.yaml`, with `secrets.values.yaml` git-ignored) or a Kubernetes secret.
+> **Never commit the client secret.** Keep it in an uncommitted override (`helm ... -f configs/values.yaml -f secrets.values.yaml`, with `secrets.values.yaml` git-ignored — this repo's [.gitignore](../.gitignore) covers it) or a Kubernetes secret.
 
 ## Step 3: Deploy
 
@@ -124,13 +124,13 @@ To hand the same fixed datasets to a whole class, attach a PVC via `singleuser.s
 
 ## Operational good practice
 
-- Keep `values.yaml` under version control in NRP GitLab and auto-redeploy on change via the k8s integration.
+- Keep `values.yaml` under version control in NRP GitLab and auto-redeploy on change via the [k8s GitLab integration](https://nrp.ai/documentation/userdocs/development/k8s-integration/). Pushing to the `nrp` remote from [NRP GitLab](4_nrp_gitlab.md) is the entry point for this.
 - Maintain a running doc of the hub setup, per-assignment profiles, and workflows for maintainers.
 
 ## Before you go live (confirm)
 
 - **Right-size memory** for the BGP and DNS profiles against real runs (telescope's 16/24 Gi is authoritative; the others are estimates).
-- **Spark JARs:** confirm they are pre-staged in the image (they are, in [image/Dockerfile](../image/Dockerfile)), or that NRP pod egress to Maven Central is permitted at Spark session start.
+- **Spark JARs:** confirm they are pre-staged in the image (they are, in [image/Dockerfile](../image/Dockerfile) — the pipeline log shows the two `curl` fetches), or that NRP pod egress to Maven Central is permitted at Spark session start.
 - **Egress/reachability:** confirm the namespace can reach in-cluster `rook-ceph-rgw-nautiluss3.rook` and the external hosts (OSDF, `object.openintel.nl`, `manycast.net`).
 - **Base image:** confirm the Spark-capable base carries a Python compatible with the pinned dependencies.
 
@@ -140,6 +140,7 @@ To hand the same fixed datasets to a whole class, attach a PVC via `singleuser.s
 - **OAuth callback mismatch** — ensure the callback URL registered with CILogon exactly matches your hub's hostname and path.
 - **DNS S3A read failures** — verify `fs.s3a.vectored.io.enabled` and `parquet.hadoop.vectored.io.enabled` are both `false`.
 - **Can't reach CAIDA data** — the `rook-ceph-rgw-nautiluss3.rook` endpoint only resolves inside the cluster; it won't work from a laptop.
+- **`ImagePullBackOff` or `exec format error`** — the image isn't pullable (private registry without a pull secret) or was built for the wrong CPU architecture; see [NRP GitLab](4_nrp_gitlab.md).
 
 ## References
 

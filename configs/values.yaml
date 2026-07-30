@@ -1,11 +1,25 @@
 # Helm values for the NIDS JupyterHub (chart: jupyterhub/jupyterhub, version 3.3.7).
 #
 # One hub, one spawner profile per NIDS assignment. All profiles share the single
-# combined image built from ../image/Dockerfile; they differ only by display name
+# combined image built from ../image/Dockerfile by NRP GitLab CI/CD (see
+# ../.gitlab-ci.yml and docs/4_nrp_gitlab.md); they differ only by display name
 # and memory envelope.
 #
 # Replace every <PLACEHOLDER>. Do NOT commit a real client secret — see hub.config
 # below and keep secrets in an uncommitted override file or a Kubernetes secret.
+
+# ---------------------------------------------------------------------------
+# Pull secret for a PRIVATE GitLab project's registry. Leave commented out if the
+# project is public. Create the secret first (see docs/4_nrp_gitlab.md):
+#   kubectl create secret docker-registry regcred -n <NAMESPACE> \
+#     --docker-server=gitlab-registry.nrp-nautilus.io/caida-nids/nids-jupyterhub \
+#     --docker-username=gitlab+deploy-token-<TOKEN_ID> --docker-password=<TOKEN>
+#
+# This is the chart's TOP-LEVEL imagePullSecrets, not singleuser.image.pullSecrets --
+# the hub, the user pods, AND the chart's image puller all need the credential.
+# ---------------------------------------------------------------------------
+# imagePullSecrets:
+#   - regcred
 
 # ---------------------------------------------------------------------------
 # Authentication — CILogon OAuth (register at https://cilogon.org/oauth2/register:
@@ -88,8 +102,16 @@ ingress:
 # only value stated by a assignment (its README/notebook: "at least 16GB, recommend 24").
 # ---------------------------------------------------------------------------
 singleuser:
+  # Optional: NRP has both amd64 and arm64 nodes, and the CI-built image is
+  # single-architecture (whatever the runner was). Uncomment to keep pods off nodes
+  # that would fail with "exec format error".
+  # nodeSelector:
+  #   kubernetes.io/arch: amd64
   image:
     name: gitlab-registry.nrp-nautilus.io/caida-nids/nids-jupyterhub/nids-hub
+    # `latest` is mutable and pods default to pullPolicy: IfNotPresent, so a node
+    # that already cached `latest` keeps serving the OLD image. Set this to the
+    # pipeline's <short-sha> tag when you need a rollout you can prove happened.
     tag: latest
   storage:
     capacity: 10Gi

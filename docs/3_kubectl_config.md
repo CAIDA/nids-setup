@@ -55,7 +55,7 @@ kubectl oidc-login clean
 
 ## Next
 
-With `kubectl` talking to your namespace, continue to [NRP GitLab](4_nrp_gitlab.md) to build and push the hub image, then [JupyterHub](5_nrp_jupyterhub.md) to deploy your own JupyterHub.
+With `kubectl` talking to your namespace, continue to [NRP GitLab](4_nrp_gitlab.md) to have GitLab CI/CD build and publish the hub image — no local Docker needed — then [JupyterHub](5_nrp_jupyterhub.md) to deploy your own JupyterHub.
 
 ## References
 

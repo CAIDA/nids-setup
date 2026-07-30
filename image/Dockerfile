@@ -1,4 +1,4 @@
-# Combined container image for the NIDS JupyterHub (one image, three spawner profiles).
+# Combined container image for the NIDS JupyterHub (one image, one profile per assignment).
 #
 # Base image (RECOMMENDATION — confirm before production):
 #   A Spark-capable Jupyter base so the JVM + Spark are preinstalled for the DNS
@@ -6,11 +6,20 @@
 #   pure Python and ignore the Spark bits. If you prefer a smaller footprint you
 #   can split the DNS/Spark image off from a plain BGP+telescope image later.
 #
-# Confirm the base image ships a Python compatible with the pinned packages in
-# requirements.txt before relying on it.
-FROM quay.io/jupyter/all-spark-notebook:latest
+# Pinned by digest, not by :latest. The tag is mutable, and every time it moves the
+# CI build's layer cache is fully invalidated — turning a one-line change back into a
+# cold multi-GB rebuild. This is the OCI *image index* digest, so it still resolves
+# per-architecture; do NOT replace it with a platform-specific manifest digest or the
+# build will fail on a runner of the other architecture.
+#
+# Resolved 2026-07-29 (index: linux/amd64 + linux/arm64). To bump deliberately:
+#   curl -sI -H "Accept: application/vnd.oci.image.index.v1+json" \
+#     https://quay.io/v2/jupyter/all-spark-notebook/manifests/latest \
+#     | grep -i docker-content-digest
+# Confirm the new base still ships a Python compatible with requirements.txt.
+FROM quay.io/jupyter/all-spark-notebook@sha256:34354ca8fa27633019ad0913a6b9e6e168cff33b1c71019cc87881047ded88df
 
-# --- Python dependencies (union of the three assignment notebooks) ---
+# --- Python dependencies (union of the assignment notebooks) ---
 COPY requirements.txt /tmp/requirements.txt
 RUN pip install --no-cache-dir -r /tmp/requirements.txt
 
@@ -31,7 +40,15 @@ RUN set -eux; \
       "${MAVEN}/software/amazon/awssdk/bundle/${AWS_SDK_BUNDLE_VERSION}/bundle-${AWS_SDK_BUNDLE_VERSION}.jar"
 USER ${NB_UID}
 
-# Build & push to the NRP GitLab registry, e.g.:
-#   docker build -t gitlab-registry.nrp-nautilus.io/<group>/<project>/nids-hub:latest image/
-#   docker push  gitlab-registry.nrp-nautilus.io/<group>/<project>/nids-hub:latest
-# (ideally automated via NRP GitLab CI/CD).
+# Built and pushed by ../.gitlab-ci.yml on NRP GitLab CI/CD — see docs/4_nrp_gitlab.md.
+# The pipeline builds with Kaniko using build context image/, and publishes both
+#   gitlab-registry.nrp-nautilus.io/<group>/<project>/nids-hub:latest
+#   gitlab-registry.nrp-nautilus.io/<group>/<project>/nids-hub:<short-sha>
+#
+# Fallback only, if CI is unavailable (see "Building locally instead" in doc 4).
+# --platform linux/amd64 is NOT optional on Apple Silicon or any ARM machine: NRP's
+# nodes are predominantly x86, and an arm64 image fails at pod start with
+# "exec format error".
+#   docker build --platform linux/amd64 \
+#     -t gitlab-registry.nrp-nautilus.io/<group>/<project>/nids-hub:latest image/
+#   docker push gitlab-registry.nrp-nautilus.io/<group>/<project>/nids-hub:latest

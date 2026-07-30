@@ -1,0 +1,11 @@
+# Local Helm overrides holding secrets -- never commit the CILogon client secret
+# (see configs/values.yaml and docs/5_nrp_jupyterhub.md).
+secrets.values.yaml
+*.secret.yaml
+
+# Scratch/working material -- z- prefixed files are not shipped repo content (CLAUDE.md).
+z-*
+
+# Local agent/editor/OS state.
+.claude/settings.local.json
+.DS_Store

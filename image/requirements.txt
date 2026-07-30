@@ -1,10 +1,11 @@
 # Python dependencies for the combined NIDS JupyterHub image.
 #
-# This is the union of the three assignment key notebooks' actual imports:
+# This is the union of the assignment key notebooks' actual imports:
 #   - nids-bgp-control-plane : pybgpkit-parser, pelicanfs, pytricia, pandas, matplotlib
 #   - nids-telescope-traffic : dpkt, pandas, pyarrow, pybgpkit-parser, pelicanfs,
 #                              pytricia, geoip2, maxminddb, matplotlib
 #   - nids-dns-ecosystem     : pyspark, tldextract, dnspython, numpy, requests, matplotlib
+#   - nids-iyp               : neo4j, python-dotenv, pandas, matplotlib
 #
 # Version specifiers below come from nids-telescope-traffic/.../requirements.txt
 # (the only assignment that pins). The rest are left unpinned to match the notebooks'
@@ -22,8 +23,20 @@ pelicanfs>=1.0
 pybgpkit-parser>=0.18   # import as `import pybgpkit_parser as bgpkit` (NOT `import bgpkit`)
 
 # --- DNS ecosystem ---
+# OPEN ITEM: the all-spark-notebook base already ships Spark, and the PyPI `pyspark`
+# distribution is source-only and large, so pip builds and installs a second copy over
+# it. That costs build time and image size, and risks a version skew against $SPARK_HOME
+# and the pre-staged hadoop-aws JAR. Likely wants removing or pinning to the base's
+# Spark version — needs a real Spark session against the DNS notebook to confirm first.
 pyspark
 tldextract
 dnspython               # import as `import dns.resolver`
 numpy
 requests
+
+# --- IYP (Internet Yellow Pages) ---
+# pandas + matplotlib are already covered above; jupyterlab comes from the base image.
+# NOTE: the notebook also needs a reachable Neo4j instance and a neo4j_credentials.env
+# file — neither is provided by this image. See DESIGN.md, "Infrastructure beyond the hub".
+neo4j                   # Neo4j Python driver, connects over bolt://
+python-dotenv           # loads neo4j_credentials.env
