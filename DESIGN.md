@@ -11,8 +11,8 @@ currently covers, and what is still unresolved.
 ## What is being built
 
 One JupyterHub, in one NRP namespace, serving every NIDS assignment as its own **spawner profile**,
-all sharing **one combined container image**. The image is built by NRP GitLab CI/CD and published
-to NRP GitLab's container registry.
+all sharing **one combined container image**. The image is built with Docker by a maintainer and
+pushed to a public container registry; readers of the setup guides only pull it.
 
 **You do not need a hub per assignment.** **[verified]** A JupyterHub deployment is bound to one
 namespace, one hostname, one CILogon OAuth application, one culling policy, and one admin set. The
@@ -30,15 +30,47 @@ directory at 5 GB (extendable on request).
 
 ## Setup chain
 
-| Guide | Establishes |
-|---|---|
-| [docs/1_kubectl_install.md](docs/1_kubectl_install.md) | `kubectl` + the `kubelogin` OIDC plugin |
-| [docs/2_nrp_namespace.md](docs/2_nrp_namespace.md) | NRP Portal access, a namespace, and your `HUB_HOST` |
-| [docs/3_kubectl_config.md](docs/3_kubectl_config.md) | `kubectl` pointed at the namespace |
-| [docs/4_nrp_gitlab.md](docs/4_nrp_gitlab.md) | GitLab group/project, the CI pipeline, the published image |
-| [docs/5_nrp_jupyterhub.md](docs/5_nrp_jupyterhub.md) | The Helm deployment, profiles, policy, storage, egress |
+Because deploying a hub is optional, the chain is **two paths, not one** — the reader picks in
+[README.md](README.md) before doc 1, and each guide declares which path it serves. Most of the chain
+turns out to be own-hub-only: on the community hub the reader needs a namespace and the
+verification notebook, nothing else. `kubectl` is deployment tooling only — **[verified]** no
+assignment touches Kubernetes; every dataset is read from inside the server over HTTP, S3A, or
+Postgres.
 
-Doc 5 carries the operational detail (per-assignment data paths, the egress table, cluster policy,
+| Guide | Establishes | Path |
+|---|---|---|
+| [docs/1_kubectl_install.md](docs/1_kubectl_install.md) | `kubectl` + the `kubelogin` OIDC plugin | Own hub |
+| [docs/2_nrp_namespace.md](docs/2_nrp_namespace.md) | Steps 1–3: NRP Portal access and a namespace · Steps 4–5: `HUB_HOST` and the CILogon OAuth app | Both · Own hub |
+| [docs/3_kubectl_config.md](docs/3_kubectl_config.md) | `kubectl` pointed at the namespace | Own hub |
+| [docs/4_nrp_jupyterhub.md](docs/4_nrp_jupyterhub.md) | The Helm deployment, profiles, policy, storage, egress | Own hub |
+| [docs/5_verify_hub.md](docs/5_verify_hub.md) | Proof the hub works, from inside a spawned server | Both (community hub: Steps 1–3 only) |
+
+Outside that chain: [docs/0_build_images.md](docs/0_build_images.md) builds and publishes the image.
+It is maintainer-only — the reader path starts at doc 1 and the image is already published.
+
+## The environment checks
+
+`kubectl` can prove a pod is `Running` and nothing beyond it. Everything that actually breaks a
+class — a dependency missing from the image, a memory limit that didn't apply, egress that reaches
+PyPI but not `ftp.ripe.net` — is only visible from inside a spawned server. So the verification
+layer is notebooks, not commands:
+
+- [notebooks/test.ipynb](notebooks/test.ipynb) — the hub: kernel, `%pip`, home PVC, memory envelope,
+  external egress, in-cluster Ceph, and (as warnings, since the hosted NRP hub has no Spark) the
+  image's Spark capability. Run once per spawner profile.
+- `00-environment-check.ipynb` in each **answer-key** repo — that assignment's own datasets, via a
+  small real read (a listing, a Parquet schema, the first bytes of an object), not a ping.
+
+Two decisions worth not relitigating:
+
+- **They live in the `-key` repos, not the student repos.** **[verified]** These are instructor
+  tools — the question they answer is "is this assignment ready to hand out". ITDK's check reads
+  `db_credentials.env`, which students never have.
+- **The check runner is duplicated into every notebook rather than imported.** **[verified]** Each
+  notebook is handed around as a single file into a fresh server; no import path is safe to assume.
+  The duplication is the price of that, and it is the cheaper side of the trade.
+
+Doc 4 carries the operational detail (per-assignment data paths, the egress table, cluster policy,
 shared storage). This file does not duplicate it — it records the *decisions* and what is open.
 
 ## The image
@@ -47,7 +79,7 @@ shared storage). This file does not duplicate it — it records the *decisions* 
   [image/Dockerfile](image/Dockerfile). A Spark-capable Jupyter base means the JVM and Spark are
   preinstalled for the DNS assignment; the other profiles ignore the Spark bits. **[unverified]**
   (recommendation — confirm the base's Python stays compatible with the pinned packages).
-  Pinning by digest is deliberate: a moving `:latest` invalidates the entire CI layer cache. The
+  Pinning by digest is deliberate: a moving `:latest` invalidates the entire layer cache. The
   *index* digest is pinned, not a platform-specific one, so it still resolves per-architecture.
 - **Python dependencies:** [image/requirements.txt](image/requirements.txt), the union of the
   assignments' imports, grouped by which assignment each came from.
@@ -56,16 +88,21 @@ shared storage). This file does not duplicate it — it records the *decisions* 
   notebook otherwise pulls them from Maven Central via `spark.jars.packages` at session start; the
   pre-stage removes that runtime egress dependency.
 - **System requirement:** a JVM, satisfied by the base image. **[verified]**
-- **Registry path:** `gitlab-registry.nrp-nautilus.io/caida-nids/nids-jupyterhub/nids-hub`,
-  published as `:latest` and `:<short-sha>`. This is `singleuser.image.name` in
-  [configs/values.yaml](configs/values.yaml).
+- **Built size: ~7.0 GB.** **[verified]** Every spawned pod pulls this, so it is the metric to watch
+  against the "split off DNS/Spark" trigger below. The redundant pip `pyspark` is part of it.
+- **Registry path:** a `nids-hub` repository under a CAIDA-owned registry account, published as
+  `:latest` and `:<git-short-sha>`. This is `singleuser.image.name` in
+  [configs/values.yaml](configs/values.yaml), currently the `<IMAGE_PATH>` placeholder.
+  **[unverified]** The account is not yet chosen; a public Docker Hub repo (`caida/nids-hub`) is the
+  recommendation, with GHCR (`ghcr.io/caida/nids-hub`) the alternative. Public matters: a private
+  repository forces an `imagePullSecrets` on every namespace that deploys the hub.
 
 ## The build path
 
-Sources live on GitHub (`CAIDA/nids-setup`), but NRP GitLab CI only builds repos hosted in NRP
-GitLab — so the GitLab project is added as a **second git remote** (`nrp`) and pushed to. Pushing
-carries [.gitlab-ci.yml](.gitlab-ci.yml), which builds with **Kaniko** on the ordinary Kubernetes
-runners. Full walkthrough in [docs/4_nrp_gitlab.md](docs/4_nrp_gitlab.md).
+A maintainer builds `image/` locally with `docker buildx build --platform linux/amd64` and pushes
+both tags — wrapped by [scripts/build-push.sh](scripts/build-push.sh) so the flags and the SHA tag
+aren't retyped. Nothing in CI builds it, and the readers of docs 1-4 never build it at all. Full
+walkthrough in [docs/0_build_images.md](docs/0_build_images.md).
 
 ## Decisions and why
 
@@ -74,10 +111,10 @@ runners. Full walkthrough in [docs/4_nrp_gitlab.md](docs/4_nrp_gitlab.md).
 | Hub count | One hub, one profile per assignment | **[verified]** A hub binds one namespace/hostname/OAuth app/cull policy; assignments differ only per-profile. |
 | Image strategy | One combined image | **[unverified]** (recommendation) The dependency sets are additive, not conflicting; BGP and telescope already share the same prefix-to-AS / MRT stack. Split off **only** if the image becomes unwieldy or a real version-pin conflict appears — and then peel off just DNS/Spark, keeping BGP+telescope together. |
 | Spark mode | Local mode, single pod | **[verified]** The DNS notebook sets `conf.setMaster("local[*]")`. No standalone or operator-managed Spark cluster is needed. |
-| Builder | Kaniko, not Docker | **[verified]** NRP has only one dedicated Docker build server; Kaniko runs on the ordinary runners. |
-| Registry path | A `/nids-hub` sub-repository under the project | A named sub-repository lets one project publish several images, which matters if the DNS/Spark image is ever split off. |
-| Base image pinning | Digest, not `:latest` | A moving tag invalidates the whole Kaniko cache, turning one-line changes into cold multi-GB rebuilds. |
-| Architecture | amd64 in practice | **[verified]** NRP has both amd64 and arm64 nodes; a single-arch image on the wrong node fails with `exec format error`. Kaniko builds for its runner's architecture. |
+| Builder | `docker buildx` on a maintainer's machine, not CI | **[unverified]** (recommendation) The image changes a handful of times a year, so a hand-run build beats maintaining a pipeline. The rejected alternative was NRP GitLab CI, which only builds repos it hosts — with the sources on GitHub that cost a second git remote pushed on every image change, plus an account, group, and project in the setup path. |
+| Registry path | A public `nids-hub` repository, registry-agnostic | **[unverified]** Keeping the registry a variable (`IMAGE=`) means the account can change without touching the Dockerfile or the script; public keeps `imagePullSecrets` out of every deployment. |
+| Base image pinning | Digest, not `:latest` | A moving tag invalidates the whole layer cache, turning one-line changes into cold multi-GB rebuilds. |
+| Architecture | amd64, explicitly | **[verified]** NRP has both amd64 and arm64 nodes; a single-arch image on the wrong node fails with `exec format error`. `--platform linux/amd64` is therefore mandatory, and on an Apple Silicon build host it means QEMU emulation and a slow build. |
 
 ## Assignment coverage
 
@@ -87,12 +124,18 @@ now added but its database not yet deployed.
 
 | Assignment | Profile | Image deps | Notes |
 |---|---|---|---|
-| `nids-bgp-control-plane` | ✅ | ⚠️ inferred | **[unverified]** The `.ipynb` was not yet committed and there is no `requirements.txt`; deps inferred from `Datasets.md` and the shared telescope stack. Confirm when the notebook lands. |
+| `nids-bgp-control-plane` | ✅ | ✅ **[verified]** | Its notebook has since landed: `%pip install pybgpkit-parser pelicanfs pytricia pandas` plus `matplotlib`, all already in `requirements.txt`. The earlier inference from `Datasets.md` was right. |
 | `nids-telescope-traffic` | ✅ | ✅ **[verified]** | Pins its own `requirements.txt`. Highest memory profile. |
 | `nids-dns-ecosystem` | ✅ | ✅ **[verified]** | Only assignment using Spark. |
 | `nids-iyp` | ❌ not yet | ✅ `neo4j`, `python-dotenv` added | **Blocked on a Neo4j instance** — see below. `nids-iyp.ipynb` does not exist yet, so deps come from its `requirements.txt`/`pyproject.toml`, not real imports. |
-| `nids-asn-introduction` | ❌ | — | Prerequisite of the BGP assignment. **[verified]** Adding it is just another profile entry. |
-| `nids-geolocation`, `nids-ip-data-plane`, `nids-irr-rpki-whois`, `nids-itdk`, `nids-ucsdnt-expanse` | ❌ | — | Not yet assessed. |
+| `nids-asn-introduction` | ❌ | ✅ nothing to add | **[verified]** Its notebook imports the standard library only and has no `%pip` line; it reads the same two Ceph objects as BGP. Prerequisite of the BGP assignment — adding it is just another profile entry. |
+| `nids-irr-rpki-whois` | ❌ | ⚠️ **missing** `py-radix`, `tqdm` | **[verified]** from the notebook's imports. Also the only assignment reading `ftp.ripe.net` (see the egress note below). |
+| `nids-itdk` | ❌ | ⚠️ **missing** `sqlalchemy`, `psycopg2-binary`, `pycountry`, `scipy`, `python-dotenv` | **[verified]** from the notebook's imports. **Blocked on a Postgres instance** — see below, same shape as IYP's Neo4j gap. |
+| `nids-geolocation`, `nids-ip-data-plane`, `nids-ucsdnt-expanse` | ❌ | — | Not yet assessed. |
+
+The two ⚠️ rows are recorded, not fixed: adding them to `image/requirements.txt` widens the image
+for assignments that have no profile yet, which is a scope decision, not a bug. Each assignment's
+`00-environment-check.ipynb` carries its own `%pip` line, so the checks pass today regardless.
 
 ### Memory envelopes
 
@@ -117,8 +160,21 @@ now added but its database not yet deployed.
 ## Infrastructure beyond the hub
 
 Data sources, reachability, and the in-cluster vs external egress split are tabulated in
-[docs/5_nrp_jupyterhub.md](docs/5_nrp_jupyterhub.md#data-access-and-egress). Shared datasets go to a
+[docs/4_nrp_jupyterhub.md](docs/4_nrp_jupyterhub.md#data-access-and-egress). Shared datasets go to a
 `ReadOnlyMany`/`ReadWriteMany` PVC mounted read-only at `/home/shared`. **[verified]**
+
+That table is missing `ftp.ripe.net`. **[verified]** `nids-irr-rpki-whois` fetches RPKI ROA dumps
+from `https://ftp.ripe.net/ripe/rpki/{ta}.tal/…/roas.csv.xz` for five trust anchors — external
+egress to a host no other assignment touches. Add it to the table when IRR/RPKI gets a profile.
+
+### ITDK needs a Postgres instance
+
+`nids-itdk` queries a `caida_itdk` schema in a Postgres deployed into the class namespace from the
+assignment's own `postgres.yaml`, with credentials handed out through a `db_credentials.env`
+uploaded next to the notebook (`ITDK_READ_DSN`, read-only user). **[verified]** Same shape as the
+IYP gap below: nothing in this repo provisions it, and an ITDK profile without it spawns a notebook
+that cannot connect. Unlike IYP's Neo4j, Postgres *does* have real role-based access control, so the
+read-only credential is genuinely read-only.
 
 ### IYP needs a Neo4j instance — not yet built
 
@@ -154,21 +210,18 @@ cannot connect.
 
 ## Operational good practice
 
-- Keep `values.yaml` under version control in NRP GitLab; auto-redeploy on change via the
-  [k8s GitLab integration](https://nrp.ai/documentation/userdocs/development/k8s-integration/).
-  **[verified]**
-- NRP backs up nightly **except container images** — enable registry tag cleanup so SHA tags and
-  Kaniko cache layers don't accumulate on a shared cluster.
+- NRP backs up nightly **except container images** — prune old registry tags so the per-build SHA
+  tags don't accumulate. Keep `:latest` and the most recent few.
 
 ## Open questions
 
 | Priority | Question |
 |---|---|
-| High | **The CI pipeline has never run end to end.** The first run is effectively the image's acceptance test. Failure modes and mitigations are tabulated in [docs/4_nrp_gitlab.md](docs/4_nrp_gitlab.md#if-the-build-fails). |
-| High | Confirm `nids-bgp-control-plane` dependencies once its notebook is committed — there is still no `requirements.txt`. |
+| High | **The image builds, but has never been pushed or pulled.** **[verified]** `docker buildx build --platform linux/amd64` succeeds and the import set (`pyspark, dpkt, pytricia, pybgpkit_parser, pelicanfs, neo4j`) loads; the base index digest correctly selects amd64 on an arm64 host. Untested: the push, the cluster pull, and a real Spark session. Failure modes are tabulated in [docs/0_build_images.md](docs/0_build_images.md#if-the-build-fails). |
 | High | Deploy the IYP Neo4j instance and settle the credential model, including the Community Edition RBAC gap above. |
-| Medium | `pyspark` is in `requirements.txt` but the base image already ships Spark, so pip installs a second, possibly version-skewed copy over it. Likely wants removing or pinning to the base's Spark version — needs a real Spark session against the DNS notebook to confirm. |
-| Medium | Verify NRP egress permits OSDF/`pelicanfs` fetches and S3A reads from `object.openintel.nl` from inside the deployed namespace. |
-| Medium | The CI-built image is single-architecture. Decide between pinning `nodeSelector` to `amd64` and building a real multiarch manifest via the buildx variant. |
+| Medium | `pyspark` in `requirements.txt` is **provably redundant, and inert only by luck.** **[verified]** in the built image: pip does install a second copy at `/opt/conda/.../site-packages/pyspark` (4.2.0), but `sys.path` puts `$SPARK_HOME/python` first — set by the base's `before-notebook.d/10spark-config.sh` hook — so the base's own pyspark 4.2.0 is what imports, matching `spark-core_2.13-4.2.0`. No skew *today* because PyPI's version happens to equal the base's. Bumping either breaks that, and any path skipping the hook picks up the site-packages copy. Drop it from `requirements.txt` (saves build time and image size) once a real Spark session against the DNS notebook confirms nothing depends on it. |
+| Medium | Verify NRP egress permits OSDF/`pelicanfs` fetches and S3A reads from `object.openintel.nl` from inside the deployed namespace. The checks in [docs/5_verify_hub.md](docs/5_verify_hub.md) answer this in one run — nothing else does. |
+| Medium | **The pre-staged Spark jars may not remove the Maven dependency they were added for.** **[unverified]** `nids-dns-ecosystem-key.ipynb` still sets `spark.jars.packages`, and Ivy resolution is independent of `$SPARK_HOME/jars` — so a first Spark start in a fresh home directory likely still reaches Maven Central despite the pre-stage. If a run confirms it, either drop `spark.jars.packages` from the notebook or drop the two `curl` fetches from the Dockerfile; keeping both buys nothing. |
+| Medium | The image is single-architecture (amd64). Decide between pinning `nodeSelector` to `amd64` and publishing a real multiarch manifest — with `buildx` the latter is just `--platform linux/amd64,linux/arm64`, at the cost of a much slower build. |
 | Low | Right-size the BGP and DNS memory envelopes against real runs; only telescope's 16/24 Gi is authoritative. |
-| Low | Assess the six unassessed assignments for profile and dependency needs. |
+| Low | Assess the three still-unassessed assignments (`nids-geolocation`, `nids-ip-data-plane`, `nids-ucsdnt-expanse`) for profile and dependency needs. |

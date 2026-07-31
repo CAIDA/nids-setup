@@ -1,5 +1,5 @@
 # Local Helm overrides holding secrets -- never commit the CILogon client secret
-# (see configs/values.yaml and docs/5_nrp_jupyterhub.md).
+# (see configs/values.yaml and docs/4_nrp_jupyterhub.md).
 secrets.values.yaml
 *.secret.yaml
 

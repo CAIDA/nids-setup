@@ -1,10 +1,15 @@
-[Install kubectl](1_kubectl_install.md) | [NRP & Namespace](2_nrp_namespace.md) | **Configure kubectl** | [NRP GitLab](4_nrp_gitlab.md) | [JupyterHub](5_nrp_jupyterhub.md)
+[Install kubectl](1_kubectl_install.md) | [NRP & Namespace](2_nrp_namespace.md) | **Configure kubectl** | [JupyterHub](4_nrp_jupyterhub.md) | [Verify](5_verify_hub.md)
 
 ---
 
 # Configuring `kubectl` for Your NRP Namespace
 
-Now that `kubectl` is [installed](1_kubectl_install.md) and you have an [active namespace](2_nrp_namespace.md), this guide wires `kubectl` up to the NRP Nautilus cluster and defaults it to your namespace. You'll need this before deploying anything (see [JupyterHub](5_nrp_jupyterhub.md)).
+> **Path: your own hub — skippable on the community hub.** You never run `kubectl` against your
+> namespace on the [community hub](../README.md#start-here-whose-hub-will-you-use); skip to
+> [Verify](5_verify_hub.md). The one reason to do it anyway: Step 4 below is the quickest
+> confirmation that your namespace is actually live.
+
+Now that `kubectl` is [installed](1_kubectl_install.md) and you have an [active namespace](2_nrp_namespace.md), this guide wires `kubectl` up to the NRP Nautilus cluster and defaults it to your namespace. You'll need this before deploying anything (see [JupyterHub](4_nrp_jupyterhub.md)).
 
 ## Prerequisites
 
@@ -55,7 +60,7 @@ kubectl oidc-login clean
 
 ## Next
 
-With `kubectl` talking to your namespace, continue to [NRP GitLab](4_nrp_gitlab.md) to have GitLab CI/CD build and publish the hub image — no local Docker needed — then [JupyterHub](5_nrp_jupyterhub.md) to deploy your own JupyterHub.
+With `kubectl` talking to your namespace, continue to [JupyterHub](4_nrp_jupyterhub.md) to deploy your own JupyterHub into it.
 
 ## References
 
@@ -64,4 +69,4 @@ With `kubectl` talking to your namespace, continue to [NRP GitLab](4_nrp_gitlab.
 
 ---
 
-[Install kubectl](1_kubectl_install.md) | [NRP & Namespace](2_nrp_namespace.md) | **Configure kubectl** | [NRP GitLab](4_nrp_gitlab.md) | [JupyterHub](5_nrp_jupyterhub.md)
+[Install kubectl](1_kubectl_install.md) | [NRP & Namespace](2_nrp_namespace.md) | **Configure kubectl** | [JupyterHub](4_nrp_jupyterhub.md) | [Verify](5_verify_hub.md)

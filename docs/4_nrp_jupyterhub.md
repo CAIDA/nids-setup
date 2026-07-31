@@ -1,4 +1,4 @@
-[Install kubectl](1_kubectl_install.md) | [NRP & Namespace](2_nrp_namespace.md) | [Configure kubectl](3_kubectl_config.md) | [NRP GitLab](4_nrp_gitlab.md) | **JupyterHub**
+[Install kubectl](1_kubectl_install.md) | [NRP & Namespace](2_nrp_namespace.md) | [Configure kubectl](3_kubectl_config.md) | **JupyterHub** | [Verify](5_verify_hub.md)
 
 ---
 
@@ -6,7 +6,20 @@
 
 This guide deploys a single JupyterHub into your NRP Nautilus namespace via Helm, with **one spawner profile per NIDS assignment**. It is aimed at the instructor/admin standing up a managed course environment for the CAIDA NIDS assignments (BGP control plane, telescope traffic, DNS ecosystem).
 
-> **Alternative — the hosted NRP hub.** Deploying your own hub is optional. Students can instead use the shared hosted service at [https://jupyterhub-west.nrp-nautilus.io](https://jupyterhub-west.nrp-nautilus.io), logging in via CILogon and picking an appropriately sized instance per assignment (what the assignment READMEs assume). The tradeoff: on the shared hub you lose pinned per-assignment images, shared dataset volumes, roster-based access control, and a stable spawner menu — and you can't shift your server or reach the pre-staged data as directly if there's a problem. Note the hosted service culls a server ~1 hour after the browser disconnects and starts the home directory at 5 GB (extendable on request). Deploy your own hub when you want a managed, reproducible class environment.
+> **Path: your own hub — skip this entire guide on the community hub.** Deploying a hub is
+> optional. The alternative is NRP's hosted service at
+> [jupyterhub-west.nrp-nautilus.io](https://jupyterhub-west.nrp-nautilus.io): log in via CILogon,
+> pick an instance sized for the assignment you are running (what the assignment READMEs assume),
+> and go straight to [Verify](5_verify_hub.md). Nothing below applies there — no `values.yaml`, no
+> Helm, no CILogon registration of your own.
+>
+> The tradeoff on the hosted hub: no pinned per-assignment image (each assignment `%pip install`s
+> its deps, taking minutes), no JVM for the DNS assignment's Spark, no shared dataset volume, no
+> roster-based access control, and no stable spawner menu — you re-pick the instance size by hand
+> every time. It also culls a server ~1 hour after the browser disconnects and starts the home
+> directory at 5 GB (extendable on request). Deploy your own hub when you want a managed,
+> reproducible class environment. See the
+> [full comparison](../README.md#start-here-whose-hub-will-you-use).
 
 ## You do NOT need a hub per assignment
 
@@ -17,16 +30,10 @@ This pattern extends to additional NIDS assignments (e.g. `nids-asn-introduction
 ## Prerequisites
 
 - Completed [Install kubectl](1_kubectl_install.md) — `kubectl` and the `kubelogin` plugin installed.
-- Completed [NRP & Namespace](2_nrp_namespace.md) — you are **admin** of an active namespace.
+- Completed [NRP & Namespace](2_nrp_namespace.md) **including its own-hub-only Steps 4–5** — you are **admin** of an active namespace, you have pinned your [`HUB_HOST`](2_nrp_namespace.md#step-4-your-hubs-hostname-hub_host), and you have a [registered CILogon OAuth application](2_nrp_namespace.md#step-5-register-a-cilogon-oauth-application) with its **client ID** and **client secret** to hand.
 - Completed [Configure kubectl](3_kubectl_config.md) — `kubectl` pointed at your namespace.
-- Completed [NRP GitLab](4_nrp_gitlab.md) — the `nids-hub` image built by GitLab CI/CD and present in your registry.
+- The published `nids-hub` image path, for `singleuser.image` below. The image is already built — you only need to [build it yourself](0_build_images.md) if you are changing it.
 - [Helm](https://helm.sh/docs/intro/install/) installed locally.
-- A **CILogon OAuth application** registered at [https://cilogon.org/oauth2/register](https://cilogon.org/oauth2/register) with:
-  - Callback URL `https://<HUB_HOST>.nrp-nautilus.io/hub/oauth_callback`
-  - Client Type = **Confidential**
-  - Scopes = `org.cilogon.userinfo,openid,profile,email`
-  - Refresh Tokens = **No**
-  - Save the issued **client ID** and **client secret**.
 
 > **Routing note.** NRP is migrating from Ingress to the Gateway API (HTTPRoute); during migration hosts may be exposed on ports **50080/50443** (e.g. `https://<HUB_HOST>.nrp-nautilus.io:50443`). Plain Ingress still works as a temporary path.
 
@@ -43,10 +50,10 @@ Use chart version **3.3.7** (the version validated for NRP).
 
 Start from the annotated template at [configs/values.yaml](../configs/values.yaml) and fill in every `<PLACEHOLDER>`. Its key blocks:
 
-- **`hub.config`** — the CILogon authenticator (client ID/secret, callback, scopes from the Prerequisites) plus the **auth lockdown** (`allowed_idps` + `allowed_domains`, and/or an `allowed_users` roster) and `admin_users`.
+- **`hub.config`** — the CILogon authenticator (the client ID/secret, callback URL, and scopes from [doc 2 Step 5](2_nrp_namespace.md#step-5-register-a-cilogon-oauth-application)) plus the **auth lockdown** (`allowed_idps` + `allowed_domains`, and/or an `allowed_users` roster) and `admin_users`.
 - **`cull`** — the mandatory idle-culling policy (see [Mandatory cluster policy](#mandatory-cluster-policy)).
 - **`proxy` / `ingress`** — your hostname and TLS (NRP `cert-manager`).
-- **`singleuser.image`** — the image the pipeline published in [NRP GitLab](4_nrp_gitlab.md). Pin `tag` to the build's short SHA rather than `latest` when you want a rollout you can verify.
+- **`singleuser.image`** — the published hub image (see [Build the images](0_build_images.md) for where it comes from). Pin `tag` to the build's short SHA rather than `latest` when you want a rollout you can verify.
 - **`singleuser.profileList`** — the three assignment profiles (see [Spawner profiles](#spawner-profiles)).
 - **`singleuser.storage`** — optional shared dataset volume (see [Shared storage](#shared-storage)).
 
@@ -69,7 +76,7 @@ kubectl get pods -n <YOUR_NAMESPACE>
 kubectl logs -n <YOUR_NAMESPACE> deployment/jupyterhub -c hub | grep cull
 ```
 
-Once the hub pod is running, visit your hub's hostname, log in via CILogon, pick a assignment profile, and spawn a server to confirm it works end to end.
+Once the hub pod is running, visit your hub's hostname, log in via CILogon, pick a assignment profile, and spawn a server. `Running` is not the same as *working*, though — for the checks `kubectl` cannot make (do the dependencies import, is the memory envelope real, are the datasets reachable), continue to [Verify the hub works](5_verify_hub.md).
 
 ## Spawner profiles
 
@@ -108,7 +115,7 @@ The datasets split between the in-cluster object store and the public internet, 
 | `osdf-director.osg-htc.org` (OSDF / RouteViews) | BGP, telescope | External egress. |
 | `object.openintel.nl` (OpenINTEL S3A) | DNS | External egress. |
 | `manycast.net` | DNS | External egress. |
-| Maven Central | DNS (Spark JARs) | External egress — avoided by pre-staging JARs in the image (see [NRP GitLab](4_nrp_gitlab.md)). |
+| Maven Central | DNS (Spark JARs) | External egress — avoided by pre-staging JARs in the image (see [image/Dockerfile](../image/Dockerfile)). |
 
 ## Mandatory cluster policy
 
@@ -124,13 +131,13 @@ To hand the same fixed datasets to a whole class, attach a PVC via `singleuser.s
 
 ## Operational good practice
 
-- Keep `values.yaml` under version control in NRP GitLab and auto-redeploy on change via the [k8s GitLab integration](https://nrp.ai/documentation/userdocs/development/k8s-integration/). Pushing to the `nrp` remote from [NRP GitLab](4_nrp_gitlab.md) is the entry point for this.
+- Keep your filled-in `values.yaml` under version control (secrets excluded — see the note in Step 2) so a redeploy is reproducible and changes are reviewable.
 - Maintain a running doc of the hub setup, per-assignment profiles, and workflows for maintainers.
 
 ## Before you go live (confirm)
 
 - **Right-size memory** for the BGP and DNS profiles against real runs (telescope's 16/24 Gi is authoritative; the others are estimates).
-- **Spark JARs:** confirm they are pre-staged in the image (they are, in [image/Dockerfile](../image/Dockerfile) — the pipeline log shows the two `curl` fetches), or that NRP pod egress to Maven Central is permitted at Spark session start.
+- **Spark JARs:** confirm they are pre-staged in the image (they are — the two `curl` fetches in [image/Dockerfile](../image/Dockerfile)), or that NRP pod egress to Maven Central is permitted at Spark session start.
 - **Egress/reachability:** confirm the namespace can reach in-cluster `rook-ceph-rgw-nautiluss3.rook` and the external hosts (OSDF, `object.openintel.nl`, `manycast.net`).
 - **Base image:** confirm the Spark-capable base carries a Python compatible with the pinned dependencies.
 
@@ -140,7 +147,7 @@ To hand the same fixed datasets to a whole class, attach a PVC via `singleuser.s
 - **OAuth callback mismatch** — ensure the callback URL registered with CILogon exactly matches your hub's hostname and path.
 - **DNS S3A read failures** — verify `fs.s3a.vectored.io.enabled` and `parquet.hadoop.vectored.io.enabled` are both `false`.
 - **Can't reach CAIDA data** — the `rook-ceph-rgw-nautiluss3.rook` endpoint only resolves inside the cluster; it won't work from a laptop.
-- **`ImagePullBackOff` or `exec format error`** — the image isn't pullable (private registry without a pull secret) or was built for the wrong CPU architecture; see [NRP GitLab](4_nrp_gitlab.md).
+- **`ImagePullBackOff` or `exec format error`** — the image isn't pullable (private registry without a pull secret) or was built for the wrong CPU architecture; see [Build the images](0_build_images.md#if-the-build-fails).
 
 ## References
 
@@ -152,4 +159,4 @@ To hand the same fixed datasets to a whole class, attach a PVC via `singleuser.s
 
 ---
 
-[Install kubectl](1_kubectl_install.md) | [NRP & Namespace](2_nrp_namespace.md) | [Configure kubectl](3_kubectl_config.md) | [NRP GitLab](4_nrp_gitlab.md) | **JupyterHub**
+[Install kubectl](1_kubectl_install.md) | [NRP & Namespace](2_nrp_namespace.md) | [Configure kubectl](3_kubectl_config.md) | **JupyterHub** | [Verify](5_verify_hub.md)

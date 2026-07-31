@@ -7,10 +7,10 @@
 #   can split the DNS/Spark image off from a plain BGP+telescope image later.
 #
 # Pinned by digest, not by :latest. The tag is mutable, and every time it moves the
-# CI build's layer cache is fully invalidated — turning a one-line change back into a
-# cold multi-GB rebuild. This is the OCI *image index* digest, so it still resolves
+# layer cache is fully invalidated — turning a one-line change back into a cold
+# multi-GB rebuild. This is the OCI *image index* digest, so it still resolves
 # per-architecture; do NOT replace it with a platform-specific manifest digest or the
-# build will fail on a runner of the other architecture.
+# build will fail on a machine of the other architecture.
 #
 # Resolved 2026-07-29 (index: linux/amd64 + linux/arm64). To bump deliberately:
 #   curl -sI -H "Accept: application/vnd.oci.image.index.v1+json" \
@@ -40,15 +40,17 @@ RUN set -eux; \
       "${MAVEN}/software/amazon/awssdk/bundle/${AWS_SDK_BUNDLE_VERSION}/bundle-${AWS_SDK_BUNDLE_VERSION}.jar"
 USER ${NB_UID}
 
-# Built and pushed by ../.gitlab-ci.yml on NRP GitLab CI/CD — see docs/4_nrp_gitlab.md.
-# The pipeline builds with Kaniko using build context image/, and publishes both
-#   gitlab-registry.nrp-nautilus.io/<group>/<project>/nids-hub:latest
-#   gitlab-registry.nrp-nautilus.io/<group>/<project>/nids-hub:<short-sha>
+# Built and pushed by hand — see docs/0_build_images.md. Use the wrapper, which derives
+# the tags and passes the flags below (run from the repo root):
+#   IMAGE=<registry>/nids-hub scripts/build-push.sh
 #
-# Fallback only, if CI is unavailable (see "Building locally instead" in doc 4).
+# It runs, with the build context image/ (NOT the repo root — the COPY above is
+# relative to it):
+#   docker buildx build --platform linux/amd64 --provenance=false \
+#     -t <registry>/nids-hub:$(git rev-parse --short HEAD) \
+#     -t <registry>/nids-hub:latest \
+#     --push image/
+#
 # --platform linux/amd64 is NOT optional on Apple Silicon or any ARM machine: NRP's
 # nodes are predominantly x86, and an arm64 image fails at pod start with
 # "exec format error".
-#   docker build --platform linux/amd64 \
-#     -t gitlab-registry.nrp-nautilus.io/<group>/<project>/nids-hub:latest image/
-#   docker push gitlab-registry.nrp-nautilus.io/<group>/<project>/nids-hub:latest
