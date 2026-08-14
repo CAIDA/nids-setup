@@ -60,6 +60,11 @@ layer is notebooks, not commands:
   image's Spark capability. Run once per spawner profile.
 - `00-environment-check.ipynb` in each **answer-key** repo — that assignment's own datasets, via a
   small real read (a listing, a Parquet schema, the first bytes of an object), not a ping.
+- [notebooks/check-datasets.ipynb](notebooks/check-datasets.ipynb) — every dataset at once, as a
+  reachability pass rather than a deep read. It exists because the per-assignment checks are each
+  scoped to one assignment, so no single run answers "is all the data reachable from here".
+  [scripts/check-datasets.py](scripts/check-datasets.py) is its laptop-side counterpart, where the
+  six Ceph datasets are reported as skipped rather than failed.
 
 Two decisions worth not relitigating:
 
@@ -70,8 +75,10 @@ Two decisions worth not relitigating:
   notebook is handed around as a single file into a fresh server; no import path is safe to assume.
   The duplication is the price of that, and it is the cheaper side of the trade.
 
-Doc 4 carries the operational detail (per-assignment data paths, the egress table, cluster policy,
-shared storage). This file does not duplicate it — it records the *decisions* and what is open.
+[datasets/](datasets/README.md) carries the per-dataset detail — provenance, provisioning, access
+paths, and reachability checks, one directory per dataset because most are shared between
+assignments. Doc 4 carries the rest of the operational detail (the egress table, cluster policy,
+shared storage). This file does not duplicate either — it records the *decisions* and what is open.
 
 ## The image
 
@@ -129,7 +136,7 @@ now added but its database not yet deployed.
 | `nids-dns-ecosystem` | ✅ | ✅ **[verified]** | Only assignment using Spark. |
 | `nids-iyp` | ❌ not yet | ✅ `neo4j`, `python-dotenv` added | **Blocked on a Neo4j instance** — see below. `nids-iyp.ipynb` does not exist yet, so deps come from its `requirements.txt`/`pyproject.toml`, not real imports. |
 | `nids-asn-introduction` | ❌ | ✅ nothing to add | **[verified]** Its notebook imports the standard library only and has no `%pip` line; it reads the same two Ceph objects as BGP. Prerequisite of the BGP assignment — adding it is just another profile entry. |
-| `nids-irr-rpki-whois` | ❌ | ⚠️ **missing** `py-radix`, `tqdm` | **[verified]** from the notebook's imports. Also the only assignment reading `ftp.ripe.net` (see the egress note below). |
+| `nids-irr-rpki-whois` | ❌ | ⚠️ **missing** `py-radix`, `tqdm` | **[verified]** from the notebook's imports. Also the only assignment reading `ftp.ripe.net`, now in doc 4's egress table. |
 | `nids-itdk` | ❌ | ⚠️ **missing** `sqlalchemy`, `psycopg2-binary`, `pycountry`, `scipy`, `python-dotenv` | **[verified]** from the notebook's imports. **Blocked on a Postgres instance** — see below, same shape as IYP's Neo4j gap. |
 | `nids-geolocation`, `nids-ip-data-plane`, `nids-ucsdnt-expanse` | ❌ | — | Not yet assessed. |
 
@@ -154,18 +161,35 @@ for assignments that have no profile yet, which is a scope decision, not a bug. 
   `import pybgpkit_parser as bgpkit`, **not** `import bgpkit`. **[verified]** Prebuilt wheels — no
   `libbgpstream` compile needed.
 - **`dnspython`:** imported as `import dns.resolver`. **[verified]**
-- **GeoLite2:** the `GeoLite2-City.mmdb` comes from **in-cluster Ceph**, so no MaxMind account or
-  license is needed. **[verified]** (This supersedes an earlier open question about provisioning it.)
+- **GeoLite2:** the `GeoLite2-City.mmdb` comes from **in-cluster Ceph**, so **the reader** needs no
+  MaxMind account or license. **[verified]** That is a statement about the assignment, not about the
+  mirror — see the licence question below.
 
 ## Infrastructure beyond the hub
 
-Data sources, reachability, and the in-cluster vs external egress split are tabulated in
-[docs/4_nrp_jupyterhub.md](docs/4_nrp_jupyterhub.md#data-access-and-egress). Shared datasets go to a
+Every dataset is inventoried in [datasets/](datasets/README.md), with its own directory recording
+provenance, provisioning, access path, and how to check it. Which *hosts* the namespace must reach is
+tabulated in [docs/4_nrp_jupyterhub.md](docs/4_nrp_jupyterhub.md#data-access-and-egress) — including
+`ftp.ripe.net`, which `nids-irr-rpki-whois` alone touches. **[verified]** Shared datasets go to a
 `ReadOnlyMany`/`ReadWriteMany` PVC mounted read-only at `/home/shared`. **[verified]**
 
-That table is missing `ftp.ripe.net`. **[verified]** `nids-irr-rpki-whois` fetches RPKI ROA dumps
-from `https://ftp.ripe.net/ripe/rpki/{ta}.tal/…/roas.csv.xz` for five trust anchors — external
-egress to a host no other assignment touches. Add it to the table when IRR/RPKI gets a profile.
+### The Ceph-hosted datasets have no documented provisioning
+
+Six datasets are served from the in-cluster Ceph gateway: the customer cone, `as2org`, the IRR WHOIS
+dumps, `routeviews-prefix2as`, the UCSD-NT PCAP samples, and GeoLite2. The objects exist and the
+assignments read them, but **nothing in any NIDS repository records how they got there** —
+**[verified]** by search: no upload script, no bucket policy, no S3 credential for that bucket. Four
+of the six encode a date that will eventually need refreshing, and two are not verbatim mirrors:
+`as2org.jsonl` is a NIDS-specific flattened rendering, and the PCAP samples are anonymized
+derivatives of AUA/DUA-governed telescope data whose anonymization parameters are unrecorded.
+
+Each affected directory under `datasets/` records what is known and what must be recovered, rather
+than a guessed procedure.
+
+Two questions follow from the mirror rather than from any one dataset. **[unverified]** Whether
+CAIDA's re-serving of GeoLite2 is permitted by MaxMind's licence — the assignment needs no MaxMind
+account precisely *because* of the mirror, so the licence question moved rather than disappeared.
+And whether serving anonymized telescope derivatives openly is covered by the telescope's AUA/DUA.
 
 ### ITDK needs a Postgres instance
 
@@ -218,10 +242,13 @@ cannot connect.
 | Priority | Question |
 |---|---|
 | High | **The image builds, but has never been pushed or pulled.** **[verified]** `docker buildx build --platform linux/amd64` succeeds and the import set (`pyspark, dpkt, pytricia, pybgpkit_parser, pelicanfs, neo4j`) loads; the base index digest correctly selects amd64 on an arm64 host. Untested: the push, the cluster pull, and a real Spark session. Failure modes are tabulated in [docs/0_build_images.md](docs/0_build_images.md#if-the-build-fails). |
-| High | Deploy the IYP Neo4j instance and settle the credential model, including the Community Edition RBAC gap above. |
+| High | Deploy the IYP Neo4j instance and settle the credential model, including the Community Edition RBAC gap above. The pod manifest survives and is reconstructed in [datasets/iyp-neo4j](datasets/iyp-neo4j/); the dump source and the `iyp-storage` PVC definition do not. |
+| High | **Recover how the six Ceph-hosted datasets are provisioned.** **[verified]** as undocumented. Until then the hub's data cannot be rebuilt from scratch by anyone but whoever originally staged it, and the four dated objects cannot be refreshed. Per-dataset gaps are recorded under [datasets/](datasets/README.md). |
+| Medium | **Is CAIDA's Ceph mirror licensed to re-serve MaxMind GeoLite2?** **[unverified]** The assignment needs no MaxMind account because of the mirror, which relocates the licence question rather than answering it. Same shape for the anonymized telescope PCAPs under the UCSD-NT AUA/DUA. |
 | Medium | `pyspark` in `requirements.txt` is **provably redundant, and inert only by luck.** **[verified]** in the built image: pip does install a second copy at `/opt/conda/.../site-packages/pyspark` (4.2.0), but `sys.path` puts `$SPARK_HOME/python` first — set by the base's `before-notebook.d/10spark-config.sh` hook — so the base's own pyspark 4.2.0 is what imports, matching `spark-core_2.13-4.2.0`. No skew *today* because PyPI's version happens to equal the base's. Bumping either breaks that, and any path skipping the hook picks up the site-packages copy. Drop it from `requirements.txt` (saves build time and image size) once a real Spark session against the DNS notebook confirms nothing depends on it. |
-| Medium | Verify NRP egress permits OSDF/`pelicanfs` fetches and S3A reads from `object.openintel.nl` from inside the deployed namespace. The checks in [docs/5_verify_hub.md](docs/5_verify_hub.md) answer this in one run — nothing else does. |
+| Medium | Verify NRP egress permits OSDF/`pelicanfs` fetches and S3A reads from `object.openintel.nl` from inside the deployed namespace. [notebooks/check-datasets.ipynb](notebooks/check-datasets.ipynb) answers this for every dataset at once; [scripts/check-datasets.py](scripts/check-datasets.py) already confirms the external half from outside NRP. **[verified]** externally — OSDF listing, `ftp.ripe.net`, `object.openintel.nl`, `manycast.net`, and IYP bolt all reachable from a laptop. |
 | Medium | **The pre-staged Spark jars may not remove the Maven dependency they were added for.** **[unverified]** `nids-dns-ecosystem-key.ipynb` still sets `spark.jars.packages`, and Ivy resolution is independent of `$SPARK_HOME/jars` — so a first Spark start in a fresh home directory likely still reaches Maven Central despite the pre-stage. If a run confirms it, either drop `spark.jars.packages` from the notebook or drop the two `curl` fetches from the Dockerfile; keeping both buys nothing. |
 | Medium | The image is single-architecture (amd64). Decide between pinning `nodeSelector` to `amd64` and publishing a real multiarch manifest — with `buildx` the latter is just `--platform linux/amd64,linux/arm64`, at the cost of a much slower build. |
 | Low | Right-size the BGP and DNS memory envelopes against real runs; only telescope's 16/24 Gi is authoritative. |
-| Low | Assess the three still-unassessed assignments (`nids-geolocation`, `nids-ip-data-plane`, `nids-ucsdnt-expanse`) for profile and dependency needs. |
+| Low | Assess the remaining assignments for profile and dependency needs. **[verified]** `nids-ucsdnt-expanse` needs no NRP profile at all — it runs on SDSC Expanse via Slurm (see [datasets/ucsdnt-expanse-flowtuple](datasets/ucsdnt-expanse-flowtuple/)). `nids-geolocation` has an outline but no code, and will need MaxMind GeoLite2 **CSVs**, a different artifact from the `.mmdb` telescope reads. `nids-ip-data-plane` is an empty stub. |
+| Low | Two assignments have no `00-environment-check.ipynb`: `nids-iyp` and `nids-ucsdnt-expanse`. **[verified]** For IYP that is a real gap, since it targets JupyterHub like the six that do have one; for UCSDNT it is expected, since the notebook would have to run under Slurm. |

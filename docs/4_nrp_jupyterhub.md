@@ -90,32 +90,40 @@ All profiles share the one image and differ only by display name and memory enve
 
 ## Per-assignment notes
 
-### nids-bgp-control-plane
-- **Libraries:** `pybgpkit-parser` (import as `pybgpkit_parser`), `pelicanfs`, `pytricia`, `pandas`, `matplotlib`. Pure Python — **no Spark**.
-- **Data:** RouteViews RIB (MRT) streamed via **OSDF** from `https://osdf-director.osg-htc.org` (`/routeviews/route-views3/bgpdata/…/RIBS`); CAIDA customer-cone (`ppdc-ases`) and `as2org` from the **in-cluster Ceph** gateway `http://rook-ceph-rgw-nautiluss3.rook/caida/…`.
-- **Prerequisite assignment:** `nids-asn-introduction` (ASN / customer-cone concepts) — add a profile for it the same way if you teach it.
+Dataset paths, provenance, and provisioning are **not** repeated here — they live in
+[datasets/](../datasets/README.md), one directory per dataset, because most are shared between
+assignments. What follows is only what bears on the hub itself.
 
-### nids-telescope-traffic
+### nids-bgp-control-plane (BGP)
+- **Libraries:** `pybgpkit-parser` (import as `pybgpkit_parser`), `pelicanfs`, `pytricia`, `pandas`, `matplotlib`. Pure Python — **no Spark**.
+- **Data:** [routeviews-bgp-rib](../datasets/routeviews-bgp-rib/), [caida-as-customer-cone](../datasets/caida-as-customer-cone/), [caida-as2org](../datasets/caida-as2org/).
+- **Prerequisite assignment:** `nids-asn-introduction` (ASN) — reads the same two Ceph objects; add a profile for it the same way if you teach it.
+
+### nids-telescope-traffic (TELESCOPE)
 - **Libraries:** `dpkt`, `pandas`, `pyarrow`, `pybgpkit-parser`, `pelicanfs`, `pytricia`, `geoip2`, `maxminddb`, `matplotlib`. No Spark.
-- **Data:** two anonymized /16 telescope PCAPs and a MaxMind **GeoLite2-City** database, both from **in-cluster Ceph** (`…/caida/ucsd-nt/…` and `…/caida/geolocation/maxmind/…GeoLite2-City.mmdb.gz`) — no MaxMind account needed; RouteViews via OSDF for origin-AS enrichment.
+- **Data:** [ucsd-nt-pcap-samples](../datasets/ucsd-nt-pcap-samples/), [maxmind-geolite2](../datasets/maxmind-geolite2/), [routeviews-bgp-rib](../datasets/routeviews-bgp-rib/) for origin-AS enrichment.
 - **Caveat:** highest memory profile; process each capture one at a time (don't hold both flow maps in memory at once).
 
-### nids-dns-ecosystem
+### nids-dns-ecosystem (DNS)
 - **Libraries:** `pyspark`, `tldextract`, `dnspython` (import as `dns.resolver`), `numpy`, `requests`, `matplotlib`. Spark runs in **local mode** — no standalone/operator Spark cluster.
-- **Data:** OpenINTEL forward-DNS zonefile Parquet over **external S3A** at `https://object.openintel.nl` (bucket `openintel-public`, prefix `fdns/basis=zonefile`, anonymous); Anycast Census from `https://manycast.net/api/v1/export/IPv4-latest.parquet`.
+- **Data:** [openintel-fdns](../datasets/openintel-fdns/), [anycast-census](../datasets/anycast-census/).
 - **Caveat:** the Spark config sets `fs.s3a.vectored.io.enabled=false` and `parquet.hadoop.vectored.io.enabled=false` — **leave both false**; enabling them against this object store causes read failures.
 
 ## Data access and egress
 
-The datasets split between the in-cluster object store and the public internet, so the hub's namespace must be able to reach both:
+The datasets split between the in-cluster object store and the public internet, so the hub's namespace must be able to reach both. Assignment codes are the ones published on the [NIDS assignments page](https://www.caida.org/projects/nids/assignments/); what each dataset is, and which of them are behind each host, is in [datasets/](../datasets/README.md).
 
 | Source | Used by | Reachability |
 |---|---|---|
-| `rook-ceph-rgw-nautiluss3.rook` (NRP Ceph RGW) | BGP (cones, AS2Org), telescope (PCAPs, GeoLite2) | **In-cluster only** — resolvable from pods inside NRP. |
-| `osdf-director.osg-htc.org` (OSDF / RouteViews) | BGP, telescope | External egress. |
+| `rook-ceph-rgw-nautiluss3.rook` (NRP Ceph RGW) | ASN, BGP, IRR, TELESCOPE | **In-cluster only** — resolvable from pods inside NRP. |
+| `osdf-director.osg-htc.org` (OSDF / RouteViews) | BGP, TELESCOPE | External egress. |
+| `ftp.ripe.net` (RIPE RPKI ROAs) | IRR | External egress — the only assignment reaching this host. |
 | `object.openintel.nl` (OpenINTEL S3A) | DNS | External egress. |
 | `manycast.net` | DNS | External egress. |
+| `iyp-bolt.ihr.live:7687` (IYP, Bolt) | IYP | External egress — Bolt, not HTTP. |
 | Maven Central | DNS (Spark JARs) | External egress — avoided by pre-staging JARs in the image (see [image/Dockerfile](../image/Dockerfile)). |
+
+Confirm all of it in one run from inside a spawned server with [notebooks/check-datasets.ipynb](../notebooks/check-datasets.ipynb).
 
 ## Mandatory cluster policy
 
@@ -138,7 +146,7 @@ To hand the same fixed datasets to a whole class, attach a PVC via `singleuser.s
 
 - **Right-size memory** for the BGP and DNS profiles against real runs (telescope's 16/24 Gi is authoritative; the others are estimates).
 - **Spark JARs:** confirm they are pre-staged in the image (they are — the two `curl` fetches in [image/Dockerfile](../image/Dockerfile)), or that NRP pod egress to Maven Central is permitted at Spark session start.
-- **Egress/reachability:** confirm the namespace can reach in-cluster `rook-ceph-rgw-nautiluss3.rook` and the external hosts (OSDF, `object.openintel.nl`, `manycast.net`).
+- **Egress/reachability:** confirm the namespace can reach in-cluster `rook-ceph-rgw-nautiluss3.rook` and the external hosts (OSDF, `ftp.ripe.net`, `object.openintel.nl`, `manycast.net`, `iyp-bolt.ihr.live`). [notebooks/check-datasets.ipynb](../notebooks/check-datasets.ipynb) answers this in one run.
 - **Base image:** confirm the Spark-capable base carries a Python compatible with the pinned dependencies.
 
 ## Troubleshooting
@@ -146,7 +154,8 @@ To hand the same fixed datasets to a whole class, attach a PVC via `singleuser.s
 - **Pod stuck in `Pending`** — check `kubectl describe pod <pod> -n <YOUR_NAMESPACE>` for resource-quota or scheduling issues (the telescope profile needs a node that can satisfy 16–24 Gi).
 - **OAuth callback mismatch** — ensure the callback URL registered with CILogon exactly matches your hub's hostname and path.
 - **DNS S3A read failures** — verify `fs.s3a.vectored.io.enabled` and `parquet.hadoop.vectored.io.enabled` are both `false`.
-- **Can't reach CAIDA data** — the `rook-ceph-rgw-nautiluss3.rook` endpoint only resolves inside the cluster; it won't work from a laptop.
+- **Can't reach CAIDA data** — the `rook-ceph-rgw-nautiluss3.rook` endpoint only resolves inside the cluster; it won't work from a laptop. Run [notebooks/check-datasets.ipynb](../notebooks/check-datasets.ipynb) from inside a spawned server to see which datasets are actually reachable.
+- **RPKI fetches fail but everything else works** — `nids-irr-rpki-whois` is the only assignment reaching `ftp.ripe.net`, so a namespace whose egress permits CAIDA and OSDF but not RIPE fails there and nowhere else.
 - **`ImagePullBackOff` or `exec format error`** — the image isn't pullable (private registry without a pull secret) or was built for the wrong CPU architecture; see [Build the images](0_build_images.md#if-the-build-fails).
 
 ## References

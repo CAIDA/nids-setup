@@ -3,9 +3,16 @@
 secrets.values.yaml
 *.secret.yaml
 
+# Credential files the dataset guides tell you to create: neo4j_credentials.env,
+# .ucsdnts3.env, db_credentials.env (see datasets/). Commit the .env.example
+# alongside them, never the real thing.
+*.env
+!*.env.example
+
 # Scratch/working material -- z- prefixed files are not shipped repo content (CLAUDE.md).
 z-*
 
 # Local agent/editor/OS state.
 .claude/settings.local.json
 .DS_Store
+__pycache__/

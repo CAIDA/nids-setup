@@ -109,6 +109,10 @@ one touches.
 - [Build the images](docs/0_build_images.md) — build the hub's container image with Docker and push
   it to a registry. Outside the numbered chain and needed only when the image itself changes (a new
   dependency, a new assignment, a base-image bump), never to deploy a hub or to use one.
+- [Datasets](datasets/README.md) — every dataset the assignments read: who produced it, whether the
+  public version can be used or a NIDS administrator has to build a NIDS-specific version first, how
+  it is reached, and how to check it is still reachable. Also outside the numbered chain: a reader
+  following steps 1–5 never needs it, but nobody can stand the data up without it.
 
 ## Design notes
 
