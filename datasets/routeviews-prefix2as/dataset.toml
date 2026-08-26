@@ -1,0 +1,31 @@
+schema = 1
+id = "routeviews-prefix2as"
+name = "RouteViews prefix2as"
+used_by = ["IRR"]
+produced_by = "caida"
+public = true
+served_from = "ceph-only"
+setup = "undocumented"      # ❌
+time_sensitive = "yes"      # YYYY/MM/ directories plus YYYYMMDD in the filename
+credentials = []
+
+[access]
+transport = "ceph"
+host = "http://rook-ceph-rgw-nautiluss3.rook"
+# Year and month appear twice -- as directory components and inside the filename.
+# Both must agree or the object 404s. The -1200 is a fixed collection hour.
+template = "caida/routing/routeviews-prefix2as/{year}/{month}/routeviews-rv2-{date}-1200.pfx2as.gz"
+pins = ["year", "month", "date"]
+format = "gzip text, `prefix/len AS` per line"
+
+[defaults]
+year = "2023"
+month = "03"
+date = "20230301"
+
+[check]
+section = "ceph"
+order = 40
+label = "ceph: routeviews prefix2as (IRR)"
+kind = "magic"
+magic = "1f8b"

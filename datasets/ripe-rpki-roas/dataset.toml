@@ -1,0 +1,29 @@
+schema = 1
+id = "ripe-rpki-roas"
+name = "RIPE RPKI ROAs (validated payloads)"
+used_by = ["IRR"]
+produced_by = "external"
+public = true
+served_from = "both"
+setup = "none"
+time_sensitive = "yes"      # YYYY/MM/DD per trust anchor
+credentials = []
+
+[access]
+transport = "https"
+# The RIPE trust anchor is `ripencc`, not `ripe` -- a path built with ripe.tal 404s.
+template = "https://ftp.ripe.net/ripe/rpki/{ta}.tal/{year}/{month}/{day}/roas.csv.xz"
+pins = ["ta", "year", "month", "day"]
+trust_anchors = ["afrinic", "ripencc", "arin", "lacnic", "apnic"]
+
+[defaults]
+ta = "afrinic"
+year = "2023"
+month = "03"
+day = "01"
+
+[check]
+section = "external"
+order = 20
+label = "ftp.ripe.net: rpki roas (IRR)"
+kind = "http-head"

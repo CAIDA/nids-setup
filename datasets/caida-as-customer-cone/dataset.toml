@@ -1,0 +1,27 @@
+schema = 1
+id = "caida-as-customer-cone"
+name = "CAIDA AS Customer Cone (ppdc-ases)"
+used_by = ["ASN", "BGP"]
+produced_by = "caida"
+public = true               # the same file is published openly; NIDS reads a Ceph copy
+served_from = "ceph-only"
+setup = "undocumented"      # ❌ -- procedure not recoverable; see README.md
+time_sensitive = "yes"      # YYYYMMDD serial in the filename
+credentials = []
+
+[access]
+transport = "ceph"
+host = "http://rook-ceph-rgw-nautiluss3.rook"
+template = "caida/as-relationships/{serial}.ppdc-ases.txt.bz2"
+pins = ["serial"]
+format = "bzip2 text"
+
+[defaults]
+serial = "20260501"
+
+[check]
+section = "ceph"
+order = 10
+label = "ceph: customer cone (ASN, BGP)"
+kind = "magic"
+magic = "425a68"            # "BZh", hex-encoded so the TOML stays plain text

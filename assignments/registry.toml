@@ -1,0 +1,228 @@
+# NIDS assignment registry
+#
+# One block per assignment, keyed by the code published in assignments.json. Holds what
+# the setup tooling needs: which repos carry the assignment and its answer key, what its
+# environment is, and -- crucially -- which pins it supplies for each dataset it reads.
+#
+# Assignments pin *placeholders*, never URLs. The path shape lives once, in
+# datasets/<id>/dataset.toml; an assignment says only "period = 2026.05". That is what
+# makes drift visible: BGP and TELESCOPE read the same RouteViews dataset at two
+# different months, and here that is two `period` values on one dataset rather than two
+# unrelated strings in two repos.
+#
+# Every pin below was read out of the values tables in datasets/<id>/README.md, which
+# cite the notebook and line they came from. Where this file says [unverified], the fact
+# is inferred rather than read from a notebook -- keep that marking, as DESIGN.md does.
+#
+# A repo may override its own block with a `nids.toml` at its root; see docs.
+# Loader: scripts/nids_registry.py
+
+schema = 1
+
+# --- ASN ----------------------------------------------------------------------
+[ASN]
+name = "ASN Introduction"
+repo = "nids-asn-introduction"
+key_repo = "nids-asn-introduction-key"
+status = "active"
+check = "00-environment-check.ipynb"
+
+[ASN.environment]
+# [verified] DESIGN.md: the notebook imports the standard library only and has no %pip
+# line. Nothing to install beyond a Python interpreter.
+extra = []
+
+[[ASN.datasets]]
+id = "caida-as-customer-cone"
+serial = "20260501"
+
+[[ASN.datasets]]
+id = "caida-as2org"
+
+# --- BGP ----------------------------------------------------------------------
+[BGP]
+name = "BGP Control Plane"
+repo = "nids-bgp-control-plane"
+key_repo = "nids-bgp-control-plane-key"
+status = "active"
+check = "00-environment-check.ipynb"
+profile = true
+memory = { guarantee = "4Gi", limit = "8Gi", verified = false }
+
+[BGP.environment]
+# [verified] from the notebook's own %pip line.
+extra = ["pybgpkit-parser", "pelicanfs", "pytricia", "pandas", "matplotlib"]
+
+[[BGP.datasets]]
+id = "routeviews-bgp-rib"
+collector = "route-views3"
+period = "2026.05"          # BGP and TELESCOPE differ here -- see the note at the top
+
+[[BGP.datasets]]
+id = "caida-as-customer-cone"
+serial = "20260501"
+
+[[BGP.datasets]]
+id = "caida-as2org"
+
+# --- IRR ----------------------------------------------------------------------
+[IRR]
+name = "Registries: WHOIS, IRR & RPKI"
+repo = "nids-irr-rpki-whois"
+key_repo = "nids-irr-rpki-whois-key"
+# The assignments page links nids-irr-rpki-whois-local; the two are variants of the same
+# assignment, not a mistake. datasets/README.md carries the note.
+variants = ["nids-irr-rpki-whois-local"]
+status = "active"
+check = "00-environment-check.ipynb"
+
+[IRR.environment]
+# [verified] DESIGN.md: py-radix and tqdm are imported by the notebook but are NOT in
+# image/requirements.txt. A local environment built from this block is therefore wider
+# than the hub image -- deliberate, and tracked as a scope decision in DESIGN.md.
+extra = ["py-radix", "tqdm"]
+
+[[IRR.datasets]]
+id = "caida-irr-whois-dumps"
+snapshot = "2023-03-01"     # the reachability probe; the notebook walks Jan-Jun 2023
+source = "radb"
+
+[[IRR.datasets]]
+id = "routeviews-prefix2as"
+year = "2023"
+month = "03"
+date = "20230301"
+
+[[IRR.datasets]]
+id = "ripe-rpki-roas"
+ta = "afrinic"              # probe only; the notebook reads all five trust anchors
+year = "2023"
+month = "03"
+day = "01"
+
+# --- ITDK ---------------------------------------------------------------------
+[ITDK]
+name = "ITDK"
+repo = "nids-itdk"
+key_repo = "nids-itdk-key"
+status = "blocked"          # no Postgres instance exists -- DESIGN.md, High
+blocked_on = "an in-namespace Postgres deployment"
+check = "00-environment-check.ipynb"
+
+[ITDK.environment]
+# [verified] DESIGN.md, from the notebook's imports; also absent from the hub image.
+extra = ["sqlalchemy", "psycopg2-binary", "pycountry", "scipy", "python-dotenv"]
+
+[ITDK.environment.key]
+# The key repo additionally *builds* the database (nids-itdk-build-db.ipynb), which the
+# student repo never does. [unverified] whether the builder needs anything further.
+extra = []
+
+[[ITDK.datasets]]
+id = "itdk-postgres"
+
+# --- DNS ----------------------------------------------------------------------
+[DNS]
+name = "DNS Ecosystem"
+repo = "nids-dns-ecosystem"
+key_repo = "nids-dns-ecosystem-key"
+status = "active"
+check = "00-environment-check.ipynb"
+profile = true
+memory = { guarantee = "8Gi", limit = "12Gi", verified = false }
+spark = true                # the only assignment using Spark
+
+[DNS.environment]
+extra = ["dnspython", "requests"]   # [unverified] beyond Spark, which comes from the image
+
+[[DNS.datasets]]
+id = "openintel-fdns"
+source = "se"               # the graded source; the probe uses source=gov
+year = "2024"
+month = "01"
+day = "15"
+
+[[DNS.datasets]]
+id = "anycast-census"
+
+# --- TELESCOPE ----------------------------------------------------------------
+[TELESCOPE]
+name = "Network Telescope Traffic"
+repo = "nids-telescope-traffic"
+key_repo = "nids-telescope-traffic-key"
+status = "active"
+check = "00-environment-check.ipynb"
+profile = true
+# [verified] the assignment README requires >=16 GB and recommends 24. The one memory
+# number in this file that is not an inference.
+memory = { guarantee = "16Gi", limit = "24Gi", verified = true }
+
+[TELESCOPE.environment]
+requirements = "requirements.txt"   # [verified] this repo pins its own
+extra = []
+
+[[TELESCOPE.datasets]]
+id = "ucsd-nt-pcap-samples"
+sample = "062026"           # MMYYYY, not YYYYMM -- June 2026
+epoch = "1782463980"        # the assignment reads both captures; this is the first
+
+[[TELESCOPE.datasets]]
+id = "maxmind-geolite2"
+build_date = "2026-06-24"
+
+[[TELESCOPE.datasets]]
+id = "routeviews-bgp-rib"
+collector = "route-views3"
+period = "2026.06"          # one month ahead of BGP's pin -- the drift, made visible
+
+# --- IYP ----------------------------------------------------------------------
+[IYP]
+name = "Internet Yellow Pages"
+repo = "nids-iyp"
+key_repo = "nids-iyp-key"
+status = "blocked"          # student path works against the public instance; the
+blocked_on = "a self-hosted Neo4j instance for the instructor path"
+check = ""                  # [verified] no 00-environment-check.ipynb exists -- a real gap
+
+[IYP.environment]
+extra = ["neo4j", "python-dotenv"]
+
+[[IYP.datasets]]
+id = "iyp-neo4j"
+
+# --- UCSDNT -------------------------------------------------------------------
+[UCSDNT]
+name = "UCSD Network Telescope (Expanse)"
+repo = "nids-ucsdnt-expanse"
+key_repo = "nids-ucsdnt-expanse-key"
+status = "offsite"          # runs on SDSC Expanse under Slurm, not on the NRP hub, so it
+                            # needs no spawner profile at all [verified]
+check = ""                  # expected: the check would have to run under Slurm
+
+[UCSDNT.environment]
+extra = ["boto3"]           # [unverified] beyond Spark, which comes from the Singularity image
+
+[[UCSDNT.datasets]]
+id = "ucsdnt-expanse-flowtuple"
+year = "2026"
+month = "02"
+day = "14"
+
+# --- not yet assessed ---------------------------------------------------------
+# Listed so `discover` reports them rather than silently ignoring a cloned repo.
+
+[GEOLOCATION]
+name = "Geolocation"
+repo = "nids-geolocation"
+key_repo = "nids-geolocation-key"
+status = "stub"             # an outline, no code. Will need MaxMind GeoLite2 CSVs -- a
+                            # different artifact from the .mmdb TELESCOPE reads, so it
+                            # will get its own dataset directory, not an entry here.
+datasets = []
+
+[IPDATAPLANE]
+name = "IP Data Plane"
+repo = "nids-ip-data-plane"
+key_repo = "nids-ip-data-plane-key"
+status = "stub"             # empty
+datasets = []

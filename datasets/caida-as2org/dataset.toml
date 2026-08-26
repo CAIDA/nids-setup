@@ -1,0 +1,26 @@
+schema = 1
+id = "caida-as2org"
+name = "CAIDA AS-to-Organization (as2org)"
+used_by = ["ASN", "BGP"]
+produced_by = "caida"
+public = true               # via CAIDA's API; the Ceph object is a NIDS-specific flattening
+served_from = "ceph-only"
+setup = "undocumented"      # ❌ -- the most consequential one: derived, not a verbatim mirror
+time_sensitive = "no"       # stable, undated filename -- a refresh overwrites in place
+credentials = []
+
+[access]
+transport = "ceph"
+host = "http://rook-ceph-rgw-nautiluss3.rook"
+template = "caida/as2org/as2org.jsonl"
+pins = []
+format = "jsonl"
+
+[defaults]
+
+[check]
+section = "ceph"
+order = 20
+label = "ceph: as2org (ASN, BGP)"
+# No magic bytes: this is also test.ipynb's proof that the Ceph gateway works at all.
+kind = "readable"

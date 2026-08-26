@@ -1,0 +1,45 @@
+schema = 1
+id = "ucsdnt-expanse-flowtuple"
+name = "UCSD-NT FlowTuple v4 (Avro, SDSC Expanse)"
+used_by = ["UCSDNT"]
+produced_by = "caida"
+public = false              # credentialed bucket, and an Expanse allocation is required
+served_from = "not-nrp"     # SDSC Expanse via Slurm/Singularity -- never on the hub
+setup = "documented"        # credential issuance is the remaining gap
+time_sensitive = "yes"      # y/m/d partitions, and the bucket name carries a year
+credentials = ["UCSD_NT_S3_ACCESS_KEY", "UCSD_NT_S3_SECRET_KEY"]
+
+[access]
+transport = "s3"
+endpoint = "https://hermes.caida.org"
+bucket = "telescope-ucsdnt-avro-flowtuple-v4-2026"
+template = "datasource=ucsd-nt/year={year}/month={month}/day={day}/"
+pins = ["year", "month", "day"]
+# boto3: neither of these is the default.
+signature_version = "s3v4"
+addressing_style = "path"
+format = "Avro; keys end .<epoch>.flowtuple-v4.avro, ~288 files/day"
+
+# SimpleAWSCredentialsProvider, NOT Anonymous -- the opposite of openintel-fdns, whose
+# configuration is otherwise similar enough to copy by mistake.
+[access.spark_conf]
+"spark.hadoop.fs.s3a.aws.credentials.provider" = "org.apache.hadoop.fs.s3a.SimpleAWSCredentialsProvider"
+"spark.hadoop.fs.s3a.path.style.access" = "true"
+"spark.hadoop.fs.s3a.endpoint.region" = "us-east-1"
+"spark.hadoop.fs.s3a.analytics.accelerator.enabled" = "false"
+"spark.sql.execution.arrow.pyspark.enabled" = "false"
+"spark.jars.packages" = "org.apache.spark:spark-avro_2.13:4.2.0,org.apache.hadoop:hadoop-aws:3.5.0"
+
+[defaults]
+year = "2026"
+month = "02"
+day = "14"
+
+[check]
+section = "credentialed"
+order = 10
+label = "expanse: ucsd-nt flowtuple bucket (UCSDNT)"
+kind = "s3-list"
+needs_module = "boto3"
+needs_hint = "pip install boto3"
+skip_hint = "set UCSD_NT_S3_ACCESS_KEY and UCSD_NT_S3_SECRET_KEY (see datasets/ucsdnt-expanse-flowtuple/)"

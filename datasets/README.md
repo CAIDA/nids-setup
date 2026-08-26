@@ -111,13 +111,29 @@ Reachability requirements that are not datasets, and so are not listed above:
   into `data/`, IRR into `cache_nids/`, TELESCOPE writes `prefix_to_asn.pkl` and per-capture
   `.parquet` files.
 
+## The machine-readable half
+
+Each directory carries a `dataset.toml` beside its `README.md`. The README is the prose —
+provenance, gotchas, the setup narrative; the TOML is the same dataset's coordinates in a
+form a script can resolve, and it is what both checkers and the setup tooling read. No
+path is written twice.
+
+An assignment pins *placeholders*, never URLs: the path shape lives once in the dataset's
+`template`, and [assignments/registry.toml](../assignments/registry.toml) supplies
+`period = "2026.05"`. That is what makes the RouteViews drift noted above visible —
+`scripts/check-datasets.py --list --assignment BGP` and the same for `TELESCOPE` print two
+different months against one dataset.
+
+[SCHEMA.md](SCHEMA.md) documents both registries. `scripts/nids_registry.py --validate`
+cross-checks them and exits non-zero on a dangling reference.
+
 ## Checking access
 
 Two checkers, deliberately split by where they can run:
 
 | | Runs | Covers |
 |---|---|---|
-| [scripts/check-datasets.py](../scripts/check-datasets.py) | A laptop, outside NRP | Everything reachable from outside. The six Ceph datasets are reported as skipped, not failed. |
+| [scripts/check-datasets.py](../scripts/check-datasets.py) | A laptop, outside NRP | Everything reachable from outside. The six Ceph datasets are reported as skipped, not failed. `--assignment CODE` narrows the run to one assignment; `--list` resolves every coordinate without running anything. |
 | [notebooks/check-datasets.ipynb](../notebooks/check-datasets.ipynb) | Inside a spawned server on the hub | Everything, including Ceph. |
 
 Both are **reachability** passes — a HEAD, a range-GET of the first bytes, a directory listing, a

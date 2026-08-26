@@ -237,6 +237,34 @@ cannot connect.
 - NRP backs up nightly **except container images** — prune old registry tags so the per-build SHA
   tags don't accumulate. Keep `:latest` and the most recent few.
 
+## The registries
+
+Dataset coordinates used to exist in three places at once: prose in `datasets/<id>/README.md`,
+hardcoded constants in `scripts/check-datasets.py`, and again in each assignment's own
+`00-environment-check.ipynb`. They now exist once, in `datasets/<id>/dataset.toml`, with
+`assignments/registry.toml` supplying the per-assignment pins. `datasets/SCHEMA.md` documents both.
+
+- **Central, not per-assignment.** **[verified]** The per-repo copies had already diverged — the
+  RouteViews RIB month is `2026.05` in BGP and `2026.06` in TELESCOPE. Keeping the path shape in one
+  place and letting an assignment pin only `period` turns that from two unrelated strings in two
+  repos into two values on one dataset, visible in one command
+  (`check-datasets.py --list --assignment BGP`). An assignment repo may still override its own block
+  with a root `nids.toml`, so adopting this needs no change to any assignment repo.
+- **The checker was refactored, not rewritten.** **[verified]** `scripts/check-datasets.py` now
+  resolves every coordinate from the registry and holds no paths of its own; its output is
+  byte-identical to the pre-refactor version, which is what proves the TOML captured the prose
+  faithfully. Its check-runner block stays duplicated verbatim from `notebooks/test.ipynb` as before.
+- **The notebooks still may not import it.** `notebooks/check-datasets.ipynb` cannot read
+  `nids_registry.py` — the single-file rule in `CLAUDE.md` is not negotiable, since each notebook is
+  handed into a fresh server on its own. Keeping it in sync with the registry means *generating* its
+  coordinate cell, not importing. **[unverified]** — not built yet; the notebook is unchanged and its
+  values are still hand-maintained.
+- **Cloning requires a token.** **[verified]** An unauthenticated listing of the CAIDA org returns 36
+  `nids*` repos, of which 27 are GitHub Classroom student forks; `nids-setup` itself, every `-key`
+  repo, and `nids-module-creator` are private and absent. `scripts/clone-nids-repos.sh` therefore
+  refuses to run without one rather than clone a plausible-looking wrong subset, and excludes student
+  forks by default.
+
 ## Open questions
 
 | Priority | Question |

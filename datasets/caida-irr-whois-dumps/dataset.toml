@@ -1,0 +1,32 @@
+schema = 1
+id = "caida-irr-whois-dumps"
+name = "CAIDA IRR WHOIS dumps"
+used_by = ["IRR"]
+produced_by = "caida"
+public = true               # the individual IRRs publish their own; the collection is CAIDA's
+served_from = "ceph-only"
+setup = "undocumented"      # ❌
+time_sensitive = "yes"      # YYYY-MM-DD snapshot directory
+credentials = []
+
+[access]
+transport = "ceph"
+host = "http://rook-ceph-rgw-nautiluss3.rook"
+# The ftp.radb.net/radb/dbase/ segment is the mirror's layout for ALL 16 sources,
+# not a per-registry hostname. Do not try to derive one from it.
+template = "caida/routing/irr_dumps/{snapshot}/ftp.radb.net/radb/dbase/{source}.db.gz"
+pins = ["snapshot", "source"]
+format = "gzip RPSL text"
+sources = ["altdb", "arin", "bboi", "bell", "canarie", "host", "jpirr", "level3",
+           "nestegg", "nttcom", "openface", "panix", "radb", "reach", "rgnet", "tc"]
+
+[defaults]
+snapshot = "2023-03-01"
+source = "radb"
+
+[check]
+section = "ceph"
+order = 30
+label = "ceph: irr whois dumps (IRR)"
+kind = "magic"
+magic = "1f8b"
