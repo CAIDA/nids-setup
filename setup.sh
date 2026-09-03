@@ -83,7 +83,13 @@ echo "=============================================================="
 
 echo
 echo "--- 1/3  cloning module repositories -------------------------"
-bash "$HERE/scripts/clone-nids-repos.sh" "${SELECT[@]}" --root "$ROOT"
+if ! bash "$HERE/scripts/clone-nids-repos.sh" "${SELECT[@]}" --root "$ROOT"; then
+    echo
+    echo "Stopping: the module repositories did not clone, so there is nothing to build" >&2
+    echo "an environment for or to download data into. Fix the errors above and re-run;" >&2
+    echo "this script picks up where it left off." >&2
+    exit 1
+fi
 
 echo
 echo "--- 2/3  building the Python environment ---------------------"

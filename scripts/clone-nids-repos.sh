@@ -269,18 +269,48 @@ sync_one() {
         printf '%-42s left alone (diverged or no upstream)\n' "$name"
     fi
 }
-export -f sync_one
-export ROOT DRY_RUN
 export GIT_TERMINAL_PROMPT=0     # a private repo must fail, not hang asking for a password
 
-printf '%s\n' "${WANTED[@]}" \
-    | xargs -P "$JOBS" -I{} bash -c 'IFS=$'"'"'\t'"'"' read -r n u r <<<"{}"; sync_one "$n" "$u" "$r"' \
-    | sort
+# Run the syncs in batches of $JOBS, each writing to a numbered file so the report comes
+# out in registry order rather than finish order.
+#
+# Deliberately not `xargs -I{}`: BSD xargs (macOS) treats tabs as argument separators and
+# rejoins them with spaces, so a tab-separated record arrives as one field and every
+# clone gets an empty URL. GNU xargs preserves the tab, which is why that only ever broke
+# on a Mac. A plain loop is portable and needs no `export -f` either.
+OUTDIR="$(mktemp -d)"
+trap 'rm -rf "$OUTDIR"' EXIT
+
+i=0
+for record in "${WANTED[@]}"; do
+    IFS=$'\t' read -r name url ref <<<"$record"
+    sync_one "$name" "$url" "$ref" > "$OUTDIR/$(printf '%04d' "$i")" 2>&1 &
+    i=$((i + 1))
+    if [[ $((i % JOBS)) -eq 0 ]]; then wait; fi
+done
+wait
+cat "$OUTDIR"/*
+
+# Counted with `if grep -q` rather than a `grep | wc -l` pipeline: `pipefail` is on, and
+# grep exiting 1 on no-match would take the whole script down with it.
+FAILED=0
+NOACCESS=0
+for report in "$OUTDIR"/*; do
+    if grep -q 'CLONE FAILED' "$report"; then FAILED=$((FAILED + 1)); fi
+    if grep -q 'no access' "$report"; then NOACCESS=$((NOACCESS + 1)); fi
+done
 
 echo
 echo "${#WANTED[@]} repositories in $ROOT"
 if [[ $REGISTRY_MODE -eq 0 ]]; then
     [[ $SKIPPED_STUDENT -eq 0 ]] || echo "$SKIPPED_STUDENT student repos skipped (--include-students to fetch them)"
     [[ ${#SKIPPED_ARCHIVED[@]} -eq 0 ]] || echo "${#SKIPPED_ARCHIVED[@]} archived repos skipped: ${SKIPPED_ARCHIVED[*]}"
+fi
+# `no access` is an expected outcome for someone without CAIDA membership, so it is not a
+# failure. A clone that broke for any other reason is.
+[[ $NOACCESS -eq 0 ]] || echo "$NOACCESS repository/ies you cannot read were skipped"
+if [[ $FAILED -gt 0 ]]; then
+    echo "$FAILED clone(s) FAILED -- nothing downstream will work until they succeed" >&2
+    exit 1
 fi
 exit 0
