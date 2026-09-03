@@ -110,12 +110,44 @@ control and drift; a coordinate nobody has confirmed since some date should say 
 | `bolt` | Neo4j `verify_connectivity()` | |
 | `s3-list` | `list_objects_v2` under the resolved prefix | `skip_hint` |
 | `sql-tables` | lists tables in `access.schema_name` | `skip_hint` |
+| `http-fields` | parses the first JSON-lines record, expects named fields | `fields` (list) |
 
 `magic` is hex-encoded (`425a68`, not `BZh`) so the TOML stays plain text.
+
+**Magic bytes prove format, never content, and the difference has bitten us.** `caida-as2org`
+passed `http-magic` for a week while publicdata served a schema no notebook could read — the gzip
+magic was correct throughout. A dataset whose records the notebooks parse *by field name* should
+use `http-fields` and name those fields, so a schema change fails the check instead of the
+assignment.
 
 Adding a kind means adding a branch to `run_check()` in
 [scripts/check-datasets.py](../scripts/check-datasets.py). Adding a *dataset* that uses an
 existing kind means adding one TOML file and nothing else.
+
+## `[stage]` — how a dataset lands on disk
+
+Optional. A dataset with a `[stage]` block can be pre-placed by `nids-setup.py data` into each
+module's own `data/` directory, which is what lets a notebook run without reaching the dataset's
+own transport.
+
+```toml
+[stage]
+filename = "as2org.jsonl"      # what the notebook expects in data/; may contain pins
+into = ["ASN", "BGP"]          # which modules get a copy
+transform = "as2org-flatten"   # optional; a named function in nids-setup.py
+```
+
+Per module rather than a shared cache because the notebooks use relative paths —
+`Path("data/as2org.jsonl")` — so a file anywhere else is invisible to them.
+
+`transform` exists because a public coordinate is not always byte-equivalent to the mirror the
+notebooks were written against. `as2org-flatten` is the only one: publicdata serves CAIDA's raw
+`Organization` / `ASN` two-record export, and the notebooks parse the flattened
+one-row-per-organisation form the Ceph mirror holds, so staging rebuilds it. The rule this encodes
+is worth keeping — **when a public source differs from the mirror, the tooling absorbs the
+difference so the assignment text does not have to change.**
+
+Transforms run only for `--local`. On `--nrp` the mirror already holds the expected form.
 
 ## `assignments/registry.toml`
 
