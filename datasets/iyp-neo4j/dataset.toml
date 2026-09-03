@@ -4,6 +4,7 @@ name = "IYP (Internet Yellow Pages) Neo4j graph"
 used_by = ["IYP"]
 produced_by = "external"
 public = true
+public_access = true        # [verified 2026-08-27] public instance, no credentials; bolt port open
 served_from = "both"
 setup = "documented"        # for the self-hosted path; none needed for the student path
 time_sensitive = "live"     # continuously updated, no pinned snapshot

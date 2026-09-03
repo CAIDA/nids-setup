@@ -4,6 +4,7 @@ name = "RouteViews prefix2as"
 used_by = ["IRR"]
 produced_by = "caida"
 public = true
+public_access = true        # [verified 2026-08-27] publicdata publishes it; unused in v1 only because IRR is out
 served_from = "ceph-only"
 setup = "undocumented"      # ❌
 time_sensitive = "yes"      # YYYY/MM/ directories plus YYYYMMDD in the filename

@@ -4,6 +4,7 @@ name = "UCSD Network Telescope PCAP samples"
 used_by = ["TELESCOPE"]
 produced_by = "caida"
 public = false              # anonymized derivatives prepared for the assignment
+public_access = false       # anonymized derivatives prepared for the assignment; never published
 served_from = "ceph-only"
 setup = "undocumented"      # ❌
 time_sensitive = "yes"

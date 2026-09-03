@@ -4,6 +4,7 @@ name = "UCSD-NT FlowTuple v4 (Avro, SDSC Expanse)"
 used_by = ["UCSDNT"]
 produced_by = "caida"
 public = false              # credentialed bucket, and an Expanse allocation is required
+public_access = false       # credentialed bucket, and an SDSC Expanse allocation on top
 served_from = "not-nrp"     # SDSC Expanse via Slurm/Singularity -- never on the hub
 setup = "documented"        # credential issuance is the remaining gap
 time_sensitive = "yes"      # y/m/d partitions, and the bucket name carries a year

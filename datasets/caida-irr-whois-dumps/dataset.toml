@@ -4,6 +4,7 @@ name = "CAIDA IRR WHOIS dumps"
 used_by = ["IRR"]
 produced_by = "caida"
 public = true               # the individual IRRs publish their own; the collection is CAIDA's
+public_access = false       # the pinned 2023 snapshots are not re-fetchable -- no IRR archives its dumps
 served_from = "ceph-only"
 setup = "undocumented"      # ❌
 time_sensitive = "yes"      # YYYY-MM-DD snapshot directory

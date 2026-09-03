@@ -4,6 +4,7 @@ name = "ITDK router-level topology (Postgres)"
 used_by = ["ITDK"]
 produced_by = "caida"
 public = false              # the release files are public; the built database is not
+public_access = false       # a built database, unpublished; the release files are public, this is not
 served_from = "in-namespace"
 setup = "documented"
 time_sensitive = "yes"      # the loader targets a dated release

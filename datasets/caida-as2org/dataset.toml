@@ -4,6 +4,7 @@ name = "CAIDA AS-to-Organization (as2org)"
 used_by = ["ASN", "BGP"]
 produced_by = "caida"
 public = true               # via CAIDA's API; the Ceph object is a NIDS-specific flattening
+public_access = true        # [verified 2026-08-27] publicdata serves JSONL directly, HTTP 200
 served_from = "ceph-only"
 setup = "undocumented"      # ❌ -- the most consequential one: derived, not a verbatim mirror
 time_sensitive = "no"       # stable, undated filename -- a refresh overwrites in place
@@ -16,7 +17,30 @@ template = "caida/as2org/as2org.jsonl"
 pins = []
 format = "jsonl"
 
+# The open-web coordinate, and the one v1 resolves by default.
+#
+# [verified 2026-08-27] publicdata publishes `<YYYYMMDD>.as-org2info.jsonl.gz`, already
+# JSONL -- records read directly, e.g.
+#   {"changed":"20171130","country":"US","name":"1-800 Contacts, Inc.",
+#    "organizationId":"1800CO-2-ARIN","source":"ARIN","type":"Organization"}
+#
+# **[unverified]** whether this is byte-for-byte the Ceph object. That object is
+# `as2org.jsonl` -- undated, gzip-free, and described in README.md as a NIDS-specific
+# flattening. Two consequences, both deliberate and both needing a hub-side check to
+# close (PLAN §6):
+#   1. the public file is gzipped where the mirror is not;
+#   2. the mirror is undated, so pinning a serial here is a NEW version choice that the
+#      notebooks never made. 20260801 is the newest published at the time of writing.
+[access.public]
+transport = "https"
+base = "https://publicdata.caida.org/datasets/as-organizations"
+template = "{serial}.as-org2info.jsonl.gz"
+pins = ["serial"]
+format = "gzip jsonl"
+verified = "2026-08-27"
+
 [defaults]
+serial = "20260801"         # [unverified] -- see the note above; the mirror carries no date
 
 [check]
 section = "ceph"
@@ -24,3 +48,10 @@ order = 20
 label = "ceph: as2org (ASN, BGP)"
 # No magic bytes: this is also test.ipynb's proof that the Ceph gateway works at all.
 kind = "readable"
+
+[check.public]
+section = "external"
+order = 31
+label = "publicdata: as2org (ASN, BGP)"
+kind = "http-magic"
+magic = "1f8b"              # gzip

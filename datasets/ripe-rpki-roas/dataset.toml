@@ -4,6 +4,7 @@ name = "RIPE RPKI ROAs (validated payloads)"
 used_by = ["IRR"]
 produced_by = "external"
 public = true
+public_access = true        # [verified 2026-08-27] ftp.ripe.net serves the ROA archive openly
 served_from = "both"
 setup = "none"
 time_sensitive = "yes"      # YYYY/MM/DD per trust anchor

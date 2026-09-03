@@ -24,12 +24,13 @@ schema = 1
 name = "ASN Introduction"
 repo = "nids-asn-introduction"
 key_repo = "nids-asn-introduction-key"
+release = "r1"        # issue #1 -- both datasets on publicdata.caida.org; the only pure-publicdata module
 status = "active"
 check = "00-environment-check.ipynb"
 
 [ASN.environment]
-# [verified] DESIGN.md: the notebook imports the standard library only and has no %pip
-# line. Nothing to install beyond a Python interpreter.
+# [verified] 2026-09-03: the standard library plus IPython, no %pip line. IPython comes
+# from env/base.txt, so this module installs nothing of its own.
 extra = []
 
 [[ASN.datasets]]
@@ -44,6 +45,7 @@ id = "caida-as2org"
 name = "BGP Control Plane"
 repo = "nids-bgp-control-plane"
 key_repo = "nids-bgp-control-plane-key"
+release = "r1"        # issue #2 -- publicdata x2 plus RouteViews via OSDF
 status = "active"
 check = "00-environment-check.ipynb"
 profile = true
@@ -73,6 +75,8 @@ key_repo = "nids-irr-rpki-whois-key"
 # The assignments page links nids-irr-rpki-whois-local; the two are variants of the same
 # assignment, not a mistake. datasets/README.md carries the note.
 variants = ["nids-irr-rpki-whois-local"]
+release = "later"     # issue #3 -- DROPPED from v1 on reproducibility, not access: it pins 2023
+                            # snapshots and no IRR archives its dumps. See nids-irr-rpki-whois-local
 status = "active"
 check = "00-environment-check.ipynb"
 
@@ -105,6 +109,7 @@ day = "01"
 name = "ITDK"
 repo = "nids-itdk"
 key_repo = "nids-itdk-key"
+release = "later"     # issue #4 -- reads a built Postgres database that is unpublished and absent
 status = "blocked"          # no Postgres instance exists -- DESIGN.md, High
 blocked_on = "an in-namespace Postgres deployment"
 check = "00-environment-check.ipynb"
@@ -126,6 +131,7 @@ id = "itdk-postgres"
 name = "DNS Ecosystem"
 repo = "nids-dns-ecosystem"
 key_repo = "nids-dns-ecosystem-key"
+release = "r1"        # issue #5 -- anonymous OpenINTEL S3 and a plain HTTPS parquet
 status = "active"
 check = "00-environment-check.ipynb"
 profile = true
@@ -133,7 +139,10 @@ memory = { guarantee = "8Gi", limit = "12Gi", verified = false }
 spark = true                # the only assignment using Spark
 
 [DNS.environment]
-extra = ["dnspython", "requests"]   # [unverified] beyond Spark, which comes from the image
+# [verified] from the notebook's %pip line and imports, 2026-09-03. Spark is listed
+# explicitly: the image supplies it on the NRP hub, but the central environment must not
+# assume the hub.
+extra = ["pyspark", "tldextract", "dnspython", "matplotlib", "numpy", "requests"]
 
 [[DNS.datasets]]
 id = "openintel-fdns"
@@ -150,6 +159,7 @@ id = "anycast-census"
 name = "Network Telescope Traffic"
 repo = "nids-telescope-traffic"
 key_repo = "nids-telescope-traffic-key"
+release = "later"     # issue #6 -- pcap samples unpublished; MaxMind account-gated and geo-restricted
 status = "active"
 check = "00-environment-check.ipynb"
 profile = true
@@ -180,12 +190,16 @@ period = "2026.06"          # one month ahead of BGP's pin -- the drift, made vi
 name = "Internet Yellow Pages"
 repo = "nids-iyp"
 key_repo = "nids-iyp-key"
+release = "r1"        # issue #8 -- public Neo4j endpoint, no credentials. Ships with no
+                            # environment check; `verify` reports that rather than failing
 status = "blocked"          # student path works against the public instance; the
 blocked_on = "a self-hosted Neo4j instance for the instructor path"
 check = ""                  # [verified] no 00-environment-check.ipynb exists -- a real gap
 
 [IYP.environment]
-extra = ["neo4j", "python-dotenv"]
+# [verified] from the notebook's imports, 2026-09-03. python-dotenv is for the instructor
+# path against a self-hosted instance.
+extra = ["neo4j", "pandas", "python-dotenv"]
 
 [[IYP.datasets]]
 id = "iyp-neo4j"
@@ -195,6 +209,7 @@ id = "iyp-neo4j"
 name = "UCSD Network Telescope (Expanse)"
 repo = "nids-ucsdnt-expanse"
 key_repo = "nids-ucsdnt-expanse-key"
+release = "later"     # issue #7 -- credentialed bucket plus an SDSC Expanse allocation
 status = "offsite"          # runs on SDSC Expanse under Slurm, not on the NRP hub, so it
                             # needs no spawner profile at all [verified]
 check = ""                  # expected: the check would have to run under Slurm
@@ -215,6 +230,7 @@ day = "14"
 name = "Geolocation"
 repo = "nids-geolocation"
 key_repo = "nids-geolocation-key"
+release = "later"     # stub; nids-geolocation does not exist on GitHub, only its key
 status = "stub"             # an outline, no code. Will need MaxMind GeoLite2 CSVs -- a
                             # different artifact from the .mmdb TELESCOPE reads, so it
                             # will get its own dataset directory, not an entry here.
@@ -224,5 +240,6 @@ datasets = []
 name = "IP Data Plane"
 repo = "nids-ip-data-plane"
 key_repo = "nids-ip-data-plane-key"
+release = "later"     # PHANTOM -- neither repo exists. Delete this block once confirmed
 status = "stub"             # empty
 datasets = []

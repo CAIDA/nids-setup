@@ -50,39 +50,87 @@ class Dataset:
         self.used_by = data.get("used_by", [])
         self.produced_by = data.get("produced_by")
         self.public = data.get("public")
+        # `public` says the upstream data is openly published. `public_access` says the
+        # artifact *this dataset reads* can be downloaded by anyone from the open web,
+        # with no account, allocation, or vetting. They differ -- caida-as2org is public
+        # upstream while its mirror is in-cluster -- and only the second one is the v1
+        # test. Defaults to `public` so an unmarked dataset is not silently admitted.
+        self.public_access = data.get("public_access", data.get("public"))
         self.served_from = data.get("served_from")
         self.setup = data.get("setup")
         self.time_sensitive = data.get("time_sensitive")
         self.credentials = data.get("credentials", [])
         self.access = data.get("access", {})
         self.defaults = data.get("defaults", {})
-        self.check = data.get("check", {})
+        self._check = data.get("check", {})
+
+    @property
+    def public_coordinate(self):
+        """The open-web `[access.public]` block, or {} when there is no separate one.
+
+        Present only where `[access]` points somewhere not everyone can reach -- today
+        the two Ceph-mirrored CAIDA datasets, whose real artifacts are on
+        publicdata.caida.org.
+        """
+        return self.access.get("public", {})
+
+    @property
+    def coordinate(self):
+        """The block to resolve against: the public one when this dataset has one.
+
+        v1 targets machines with no NRP access, so the open-web address is the answer to
+        "where is this dataset". `mirror_*` reaches the in-cluster copy explicitly.
+        """
+        return self.public_coordinate or self.access
+
+    @property
+    def check(self):
+        """The check to run -- `[check.public]` when present, else `[check]`."""
+        return self._check.get("public") or self._check
+
+    @property
+    def mirror_check(self):
+        """The in-cluster check, when a public one supersedes it. Not run today."""
+        return self._check if self._check.get("public") else {}
 
     @property
     def transport(self):
-        return self.access.get("transport")
+        return self.coordinate.get("transport")
 
     @property
     def pins(self):
         """Placeholder names an assignment is expected to supply."""
-        return self.access.get("pins", [])
+        return self.coordinate.get("pins", [])
 
     @property
     def reachable_offsite(self):
-        """False for anything only addressable from inside the NRP cluster."""
-        return self.served_from != "ceph-only"
+        """False for anything only addressable from inside the NRP cluster.
+
+        A public coordinate settles this on its own: `served_from` records where the
+        *mirror* lives, and is irrelevant once we are resolving publicdata instead.
+        """
+        return bool(self.public_coordinate) or self.served_from != "ceph-only"
 
     def resolve(self, **pins):
         """Fill the access template. Assignment pins win over the dataset defaults.
 
+        Resolves the public coordinate when there is one -- see `coordinate`.
+
         Raises KeyError naming the missing placeholder rather than emitting a path with
         a literal `{period}` in it, which would 404 in a confusing way much later.
         """
-        template = self.access.get("template", "")
+        return self._resolve(self.coordinate, pins)
+
+    def resolve_mirror(self, **pins):
+        """The in-cluster path, for a dataset whose default coordinate is public."""
+        return self._resolve(self.access, pins)
+
+    def _resolve(self, access, pins):
+        template = access.get("template", "")
         values = dict(self.defaults)
         values.update({k: v for k, v in pins.items() if v is not None})
-        values.setdefault("bucket", self.access.get("bucket", ""))
-        values.setdefault("prefix", self.access.get("prefix", ""))
+        values.setdefault("bucket", access.get("bucket", ""))
+        values.setdefault("prefix", access.get("prefix", ""))
         missing = [n for n in _PLACEHOLDER.findall(template) if n not in values]
         if missing:
             raise KeyError(
@@ -93,8 +141,16 @@ class Dataset:
 
     def url(self, **pins):
         """The full address, including the host for transports that carry one."""
-        resolved = self.resolve(**pins)
-        host = self.access.get("host") or self.access.get("base")
+        return self._join(self.coordinate, self.resolve(**pins))
+
+    def mirror_url(self, **pins):
+        """The full in-cluster address. Empty when there is no separate mirror."""
+        if not self.public_coordinate:
+            return ""
+        return self._join(self.access, self.resolve_mirror(**pins))
+
+    def _join(self, access, resolved):
+        host = access.get("host") or access.get("base")
         if host and not resolved.startswith(("http://", "https://", "s3a://", "neo4j://", "bolt://")):
             return f"{host.rstrip('/')}/{resolved.lstrip('/')}"
         return resolved
@@ -113,7 +169,14 @@ class Assignment:
         self.repo = data.get("repo")
         self.key_repo = data.get("key_repo")
         self.status = data.get("status", "active")
+        # Which release this module ships in. Editorial: someone decided IRR waits, and
+        # that is not derivable from the dataset fields. Unmarked means not in v1 --
+        # a new module has to opt in, never land in the release by omission.
+        self.release = data.get("release", "later")
         self.check_notebook = data.get("check")
+        # Optional commit pin, honoured by clone-nids-repos.sh. Unset means track the
+        # module's default branch. See DESIGN.md.
+        self.ref = data.get("ref")
         self.memory = data.get("memory", {})
         self.environment = data.get("environment", {})
         self.datasets = data.get("datasets", [])
@@ -169,14 +232,65 @@ def load_datasets(root=None):
     return found
 
 
-def load_assignments(root=None):
-    """assignments/registry.toml, keyed by assignment code. Empty dict if absent."""
+def load_assignments(root=None, release=None):
+    """assignments/registry.toml, keyed by assignment code. Empty dict if absent.
+
+    `release="r1"` narrows to the modules that ship in v1; None or "all" returns every
+    block.
+    """
     path = repo_root(root) / "assignments" / "registry.toml"
     if not path.exists():
         return {}
     data = tomllib.loads(path.read_text())
     data.pop("schema", None)
-    return {code: Assignment(code, block) for code, block in data.items()}
+    found = {code: Assignment(code, block) for code, block in data.items()}
+    if release in (None, "all"):
+        return found
+    return {code: a for code, a in found.items() if a.release == release}
+
+
+def datasets_in_release(datasets, assignments, release="r1"):
+    """Dataset ids read by the modules in `release`, in registry order.
+
+    The release scopes *modules*; datasets follow from what those modules pin. That is
+    why routeviews-prefix2as is out of v1 despite being publicly downloadable -- its only
+    reader is IRR.
+    """
+    wanted = []
+    for assignment in load_assignments(release=release).values() if assignments is None else assignments.values():
+        if assignment.release != release:
+            continue
+        for entry in assignment.datasets:
+            if entry["id"] not in wanted:
+                wanted.append(entry["id"])
+    return [datasets[i] for i in wanted if i in datasets]
+
+
+def requirements_for(assignments, codes=None, role="assignment"):
+    """The union of every selected module's `environment.extra`, in registry order.
+
+    Names are returned exactly as spelled: they are pip requirement strings, and
+    normalising them here would silently merge `pandas` and `pandas>=2`.
+    """
+    out = []
+    for code, assignment in assignments.items():
+        if codes and code not in codes:
+            continue
+        for name in assignment.env_for(role).get("extra", []):
+            if name not in out:
+                out.append(name)
+    return out
+
+
+def base_requirements(root=None):
+    """env/base.txt -- what every module needs, whichever ones are selected."""
+    path = repo_root(root) / "env" / "base.txt"
+    if not path.exists():
+        return []
+    return [
+        line.strip() for line in path.read_text().splitlines()
+        if line.strip() and not line.lstrip().startswith("#")
+    ]
 
 
 def checks_in_order(datasets, section):
@@ -212,13 +326,28 @@ def validate(root=None):
     problems = []
 
     for dataset in datasets.values():
-        declared = set(dataset.pins)
-        used = set(_PLACEHOLDER.findall(dataset.access.get("template", "")))
-        used -= {"bucket", "prefix"}
-        for name in sorted(used - declared):
-            problems.append(f"{dataset.id}: template uses {{{name}}} but does not list it in pins")
-        for name in sorted(declared - used):
-            problems.append(f"{dataset.id}: pins lists {name!r}, which the template never uses")
+        # Both coordinates are checked: a stale placeholder in the mirror block is still
+        # a bug, and the public block is the one v1 actually resolves.
+        blocks = [("access", dataset.access)]
+        if dataset.public_coordinate:
+            blocks.append(("access.public", dataset.public_coordinate))
+        for label, block in blocks:
+            declared = set(block.get("pins", []))
+            used = set(_PLACEHOLDER.findall(block.get("template", "")))
+            used -= {"bucket", "prefix"}
+            for name in sorted(used - declared):
+                problems.append(
+                    f"{dataset.id}: [{label}] template uses {{{name}}} but does not list it in pins"
+                )
+            for name in sorted(declared - used):
+                problems.append(
+                    f"{dataset.id}: [{label}] pins lists {name!r}, which the template never uses"
+                )
+        if dataset.public_coordinate and not dataset.public_coordinate.get("verified"):
+            problems.append(
+                f"{dataset.id}: [access.public] has no `verified` date -- record when it was last "
+                f"confirmed reachable"
+            )
         if not dataset.check:
             problems.append(f"{dataset.id}: no [check] block")
 
@@ -237,11 +366,82 @@ def validate(root=None):
                 dataset.resolve(**pins)
             except KeyError as exc:
                 problems.append(f"{assignment.code}/{exc.args[0]}")
+
+    problems.extend(_release_problems(datasets, assignments))
     return problems
+
+
+def _release_problems(datasets, assignments):
+    """The v1 scope guard: nothing non-public may ship in the release.
+
+    Both clauses earn their place. `public_access` catches maxmind-geolite2 and
+    ucsd-nt-pcap-samples, which declare no credentials and are still closed; the
+    credentials list catches itdk-postgres and ucsdnt-expanse-flowtuple. Either alone
+    lets a restricted dataset back into the release through a later edit.
+    """
+    problems = []
+    for assignment in assignments.values():
+        if assignment.release != "r1":
+            continue
+        for entry in assignment.datasets:
+            dataset = datasets.get(entry["id"])
+            if dataset is None:
+                continue                      # already reported above
+            if not dataset.public_access:
+                problems.append(
+                    f"{assignment.code} is release r1 but reads {dataset.id}, which is not "
+                    f"publicly accessible -- drop the module from r1 or give the dataset a "
+                    f"public coordinate"
+                )
+            if dataset.credentials:
+                problems.append(
+                    f"{assignment.code} is release r1 but reads {dataset.id}, which requires "
+                    f"{', '.join(dataset.credentials)}"
+                )
+    return problems
+
+
+def _repos_cli(argv):
+    """`--repos` emits `code<TAB>role<TAB>repo<TAB>ref`, so the shell script never parses TOML."""
+    release = None
+    codes = None
+    for i, arg in enumerate(argv):
+        if arg == "--release" and i + 1 < len(argv):
+            release = argv[i + 1]
+        if arg == "--modules" and i + 1 < len(argv):
+            codes = {c.strip().upper() for c in argv[i + 1].split(",") if c.strip()}
+    include_key = "--include-key" in argv
+
+    assignments = load_assignments(release=None if release in (None, "all") else release)
+    if codes:
+        unknown = codes - set(assignments)
+        if unknown:
+            sys.stderr.write(
+                f"unknown assignment code: {', '.join(sorted(unknown))}\n"
+                f"known: {', '.join(sorted(assignments))}\n")
+            return 2
+    emitted = 0
+    for code, assignment in assignments.items():
+        if codes and code not in codes:
+            continue
+        roles = [("assignment", assignment.repo)]
+        if include_key:
+            roles.append(("key", assignment.key_repo))
+        for role, name in roles:
+            if not name:
+                continue
+            print(f"{code}\t{role}\t{name}\t{assignment.ref or ''}")
+            emitted += 1
+    if emitted == 0:
+        sys.stderr.write("no modules matched\n")
+        return 1
+    return 0
 
 
 def _cli():
     """`scripts/nids_registry.py` prints the registry; `--validate` cross-checks it."""
+    if "--repos" in sys.argv[1:]:
+        return _repos_cli(sys.argv[1:])
     if "--validate" in sys.argv[1:]:
         problems = validate()
         for problem in problems:

@@ -7,6 +7,7 @@ name = "RouteViews BGP RIB (MRT)"
 used_by = ["BGP", "TELESCOPE"]
 produced_by = "external"
 public = true
+public_access = true        # [verified 2026-08-27] OSDF director and archive.routeviews.org, both HTTP 200
 served_from = "both"
 setup = "none"
 time_sensitive = "yes"      # the path encodes a YYYY.MM collection month

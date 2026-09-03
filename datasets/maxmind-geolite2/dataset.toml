@@ -4,6 +4,7 @@ name = "MaxMind GeoLite2-City (Ceph mirror)"
 used_by = ["TELESCOPE"]
 produced_by = "external"    # MaxMind, CAIDA-mirrored
 public = false              # upstream is account- and licence-gated; the mirror is why
+public_access = false       # MaxMind requires an account and licence key, and geo-restricts downloads
                             # the assignment needs neither
 served_from = "ceph-only"
 setup = "undocumented"      # ❌

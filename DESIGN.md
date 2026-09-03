@@ -121,6 +121,8 @@ walkthrough in [docs/0_build_images.md](docs/0_build_images.md).
 | Builder | `docker buildx` on a maintainer's machine, not CI | **[unverified]** (recommendation) The image changes a handful of times a year, so a hand-run build beats maintaining a pipeline. The rejected alternative was NRP GitLab CI, which only builds repos it hosts — with the sources on GitHub that cost a second git remote pushed on every image change, plus an account, group, and project in the setup path. |
 | Registry path | A public `nids-hub` repository, registry-agnostic | **[unverified]** Keeping the registry a variable (`IMAGE=`) means the account can change without touching the Dockerfile or the script; public keeps `imagePullSecrets` out of every deployment. |
 | Base image pinning | Digest, not `:latest` | A moving tag invalidates the whole layer cache, turning one-line changes into cold multi-GB rebuilds. |
+| Module checkout | A registry-driven clone script, **not** git submodules | **[verified]** 2026-09-03. A submodule pins a commit, so every module author's push needs a pointer bump here and a stale pointer silently ships an old notebook; one private submodule (today `nids-iyp`) fails the whole recursive clone rather than skipping; and selection is by path, not by meaning, so `--release r1` has no submodule equivalent. `assignments/registry.toml` already carries release tier, status and key-repo pairing, which submodules cannot express. The one property submodules would have added — reproducibility — is available as an optional `ref = "<sha>"` per module, honoured on clone and unset by default. |
+| Environment backend | `python -m venv` + `pip`, one environment per *release* | **[verified]** 2026-09-03 by building it. `uv` is not present on every target and adds a dependency for a 15-package install; `micromamba` ties the release to this workspace's convention rather than an instructor's laptop. Per-release rather than per-repo because the four r1 modules overlap heavily and an instructor moving between them in one JupyterLab session wants one kernel. `--python` covers the interpreter question and is needed: a `python3.N` without `ensurepip` cannot create a venv at all. |
 | Architecture | amd64, explicitly | **[verified]** NRP has both amd64 and arm64 nodes; a single-arch image on the wrong node fails with `exec format error`. `--platform linux/amd64` is therefore mandatory, and on an Apple Silicon build host it means QEMU emulation and a slow build. |
 
 ## Assignment coverage
@@ -264,6 +266,47 @@ hardcoded constants in `scripts/check-datasets.py`, and again in each assignment
   repo, and `nids-module-creator` are private and absent. `scripts/clone-nids-repos.sh` therefore
   refuses to run without one rather than clone a plausible-looking wrong subset, and excludes student
   forks by default.
+
+## The v1 release scope
+
+**v1 ships the modules that need only publicly downloadable data.** *Publicly accessible*
+means anyone can download it from the open web — no account, no allocation, no vetting.
+`publicdata.caida.org` is the standard; obtaining NRP or SDSC Expanse access is a vetting
+process and does not count.
+
+**v1 = ASN (#1), BGP (#2), DNS (#5), IYP (#8)** — six datasets. IRR (#3), ITDK (#4),
+TELESCOPE (#6) and UCSDNT (#7) wait, and are revisited one at a time.
+
+- **Two coordinates were repointed to `publicdata.caida.org`.** **[verified 2026-08-27]**
+  `caida-as-customer-cone` and `caida-as2org` resolved only to the in-cluster Ceph mirror,
+  which meant ASN and BGP could not be checked — let alone run — from outside NRP. Both
+  now carry an `[access.public]` block and resolve to `publicdata` by default, with the
+  Ceph block retained as the mirror. `scripts/check-datasets.py --release r1` is green
+  from a machine with no NRP access and no credentials: 6 checks, 0 skipped.
+- **`served_from = "ceph-only"` described the notebooks, not the data.**
+  **[verified 2026-08-27]** The registry was seeded from what the assignment notebooks
+  read, so an internal mirror got recorded as though it were a property of the dataset.
+  Three of the four so-marked CAIDA datasets have public homes on `publicdata`.
+- **`public_access` was added because `public` could not carry this weight.**
+  `public` says the upstream is openly published; `public_access` says *this artifact* is
+  downloadable by anyone. They differ for exactly the datasets that matter, and only the
+  second is the release test. See `datasets/SCHEMA.md`.
+- **The scope is enforced, not remembered.** `nids_registry.validate()` refuses to let an
+  `r1` module read a dataset that is not publicly accessible or that requires credentials.
+  Both clauses are load-bearing: `maxmind-geolite2` and `ucsd-nt-pcap-samples` declare no
+  credentials and are still closed, while `itdk-postgres` and `ucsdnt-expanse-flowtuple`
+  are caught by the credential list. Verified by forcing TELESCOPE, ITDK and IRR into `r1`
+  in turn — each fails validation with the reason named.
+- **IRR was dropped on reproducibility, not access.** **[verified 2026-08-27]** ARIN and
+  APNIC publish their dumps openly, but the module pins `2023-03-01`, `2023-12-07` and a
+  2023 monthly series, and no IRR archives its dumps — so nobody, CAIDA included, can
+  re-fetch what the assignment was written against. `nids-irr-rpki-whois-local` (public,
+  unknown to the registry) may be the reproducible form; **[unverified]**, not examined.
+- **`caida-as2org`'s public file is not known to match the mirror.** **[unverified]** The
+  mirror is `caida/as2org/as2org.jsonl` — undated and uncompressed; `publicdata` publishes
+  `<YYYYMMDD>.as-org2info.jsonl.gz`, already JSONL. Repointing therefore introduces a
+  *serial pin the notebooks never made* (defaulted to `20260801`). Closing this needs one
+  diff run on the hub, where the Ceph object is readable.
 
 ## Open questions
 

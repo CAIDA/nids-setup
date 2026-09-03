@@ -38,7 +38,8 @@ id = "routeviews-bgp-rib"   # must equal the directory name
 name = "RouteViews BGP RIB (MRT)"
 used_by = ["BGP", "TELESCOPE"]      # assignment codes
 produced_by = "external"            # external | caida
-public = true                       # reachable without credentials
+public = true                       # the UPSTREAM data is openly published
+public_access = true                # THIS artifact is downloadable by anyone -- see below
 served_from = "both"                # both | ceph-only | not-nrp | in-namespace
 setup = "none"                      # none | documented | undocumented
 time_sensitive = "yes"              # yes | no | low | live
@@ -49,6 +50,13 @@ transport = "osdf"          # osdf | https | ceph | s3 | s3a | postgres | bolt
 base = "..."                # or `host` for ceph -- prepended by Dataset.url()
 template = "/routeviews/{collector}/bgpdata/{period}/RIBS"
 pins = ["collector", "period"]      # every placeholder above, and nothing else
+
+[access.public]             # optional: the open-web coordinate, when [access] is internal
+transport = "https"         # same fields as [access], plus:
+verified = "2026-08-27"     # required -- when it was last confirmed reachable
+base = "https://publicdata.caida.org/datasets/as-relationships/serial-1"
+template = "{serial}.ppdc-ases.txt.bz2"
+pins = ["serial"]
 
 [defaults]                  # what the checkers use with no assignment pin
 collector = "route-views3"
@@ -61,7 +69,33 @@ label = "osdf: routeviews rib listing (BGP, TELESCOPE)"
 kind = "osdf-listing"       # dispatch; see below
 needs_module = "pelicanfs.core"     # optional import gate
 needs_hint = "pip install pelicanfs"
+
+[check.public]              # optional: the check for [access.public], same fields
+section = "external"        # a public coordinate is external by definition
+kind = "http-magic"
+magic = "425a68"
 ```
+
+### `public` vs `public_access`, and `[access.public]`
+
+These are three different facts and conflating the first two is what made an earlier pass
+at the release scope wrong.
+
+- **`public`** — is the *upstream* data openly published? True of `caida-as2org`, whose
+  upstream is on `publicdata.caida.org`, even while NIDS reads an in-cluster mirror.
+- **`public_access`** — can anyone download **the artifact this dataset resolves to**,
+  from the open web, with no account, allocation, or vetting? Getting onto NRP or SDSC
+  Expanse is a vetting process and does not count. **This is the release-1 test**, and
+  `nids_registry.validate()` refuses to let an `r1` module read a dataset where it is
+  false. It defaults to `public` when unset, so a new dataset is never silently admitted
+  on a field nobody set.
+- **`[access.public]`** — the coordinate that makes `public_access` true when `[access]`
+  points somewhere not everyone can reach. When present it is what `resolve()`, `url()`,
+  `pins`, `transport` and `check` all use; `[access]` remains recorded as the in-cluster
+  mirror and is reachable via `resolve_mirror()` / `mirror_url()`.
+
+A `verified` date is required on `[access.public]`. Public endpoints are outside CAIDA's
+control and drift; a coordinate nobody has confirmed since some date should say so.
 
 ### Check kinds
 
@@ -69,7 +103,8 @@ needs_hint = "pip install pelicanfs"
 |---|---|---|
 | `http-head` | HEAD, expects 2xx | `url` (overrides the template), `note_suffix` |
 | `parquet-magic` | Range-GET 4 bytes, expects `PAR1` | |
-| `magic` | Range-GET, expects leading bytes | `magic` (hex) |
+| `magic` | Range-GET over Ceph, expects leading bytes | `magic` (hex) |
+| `http-magic` | Range-GET over HTTP(S), expects leading bytes | `magic` (hex) |
 | `readable` | Range-GET 8 bytes, no assertion | |
 | `osdf-listing` | `OSDFFileSystem().ls()`, expects non-empty | |
 | `bolt` | Neo4j `verify_connectivity()` | |
@@ -102,6 +137,13 @@ share one environment.
 `status` is `active` | `blocked` | `offsite` | `stub`. `blocked` carries a `blocked_on`
 string; `offsite` means the assignment does not run on the NRP hub at all (UCSDNT runs on
 SDSC Expanse under Slurm).
+
+`release` is `r1` | `later`, and it is **editorial** — it records a decision about which
+modules ship first, which is not derivable from the dataset fields. It defaults to
+`later`: a module opts into the release, and can never land in it by omission. The
+release scopes *modules*; the datasets in scope follow from what those modules pin, which
+is why `routeviews-prefix2as` is out of v1 despite being publicly downloadable — its only
+reader is IRR.
 
 ## Keeping the marking
 

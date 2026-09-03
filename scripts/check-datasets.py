@@ -212,6 +212,16 @@ def run_check(dataset, required_default=True):
                 db.close()
             c.note = uri
 
+        elif kind == "http-magic":
+            # The public-coordinate analogue of `magic`: prove the object is really
+            # there and is really what it claims, without pulling the whole file. A 200
+            # on its own would pass against an error page.
+            url = dataset.url()
+            magic = bytes.fromhex(spec["magic"])
+            head = http_first_bytes(url, len(magic))
+            assert head.startswith(magic), f"expected {magic.hex()}, got {head.hex()}"
+            c.note = f"magic ok, {url.rsplit('/', 1)[-1]}"
+
         elif kind in ("magic", "readable"):
             magic = bytes.fromhex(spec["magic"]) if kind == "magic" else None
             head = ceph_first_bytes(dataset.resolve(), len(magic) if magic else 8)
@@ -314,12 +324,28 @@ def main(argv=None):
                         help="print the registry's checks and their resolved paths, run nothing")
     parser.add_argument("--assignment", metavar="CODE",
                         help="check only the datasets one assignment reads (e.g. BGP)")
+    parser.add_argument("--release", default="r1", choices=("r1", "all"),
+                        help="which release to check: r1 (default) is the modules that need "
+                             "only publicly downloadable data; all checks every dataset")
     args = parser.parse_args(argv)
 
     datasets = nids_registry.load_datasets()
+    all_assignments = nids_registry.load_assignments()
+
+    if args.release != "all" and not args.assignment:
+        # Scope to what the release actually reads. Out-of-scope datasets are not
+        # attempted at all rather than attempted-and-skipped: an instructor's first run
+        # must not print red for datasets they will never touch.
+        in_release = nids_registry.datasets_in_release(datasets, all_assignments, args.release)
+        kept = {d.id for d in in_release}
+        dropped = sorted(set(datasets) - kept)
+        datasets = {i: d for i, d in datasets.items() if i in kept}
+        modules = sorted(c for c, a in all_assignments.items() if a.release == args.release)
+        print(f"release {args.release}: {', '.join(modules)} "
+              f"-- {len(kept)} datasets, {len(dropped)} out of scope\n")
 
     if args.assignment:
-        assignments = nids_registry.load_assignments()
+        assignments = all_assignments
         code = args.assignment.upper()
         if code not in assignments:
             known = ", ".join(sorted(assignments)) or "none -- assignments/registry.toml is missing"

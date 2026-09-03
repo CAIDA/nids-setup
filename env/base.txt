@@ -1,0 +1,9 @@
+# What every NIDS module needs, whichever modules are selected. Module-specific packages
+# live in assignments/registry.toml under [<CODE>.environment].extra; `nids-setup.py env`
+# unions the two. Keep this list short.
+
+jupyterlab
+ipykernel
+
+# nids_registry needs TOML support; Python 3.11+ has tomllib and never imports this.
+tomli; python_version < "3.11"
