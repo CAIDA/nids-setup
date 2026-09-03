@@ -5,14 +5,15 @@
   scripts/nids-setup.py doctor                discover, plus a reachability pass
   scripts/nids-setup.py doctor --assignment BGP
   scripts/nids-setup.py env --release r1      one environment that runs every r1 notebook
+  scripts/nids-setup.py data --release r1     stage each module's data into its data/ dir
 
 The repos come from scripts/clone-nids-repos.sh; the metadata comes from the two
 registries (datasets/<id>/dataset.toml and assignments/registry.toml, documented in
 datasets/SCHEMA.md).
 
-`discover` and `doctor` are read-only. `env` writes: a generated requirements file and,
-unless --dry-run, a virtual environment. `data` and `verify` are still to be written; see
-PLAN.md phase 4.
+`discover` and `doctor` are read-only. `env` writes a generated requirements file and, unless
+--dry-run, a virtual environment. `data` writes into each module's data/ directory. `verify` is
+still to be written; see PLAN.md phase 4.
 
 Module selection is the same on every subcommand: --release picks a whole tier (r1 is the
 four modules that read only public data), --assignment picks individual codes, and the two
@@ -22,11 +23,15 @@ Root directory, in order: --root, $NIDS_ROOT, the parent of this checkout.
 """
 
 import argparse
+import gzip
+import json
 import os
 import pathlib
 import shutil
 import subprocess
 import sys
+import urllib.error
+import urllib.request
 
 import nids_registry
 
@@ -287,6 +292,125 @@ def cmd_env(args):
     return 0
 
 
+def as2org_flatten(raw_path, out_path):
+    """Rebuild the flattened as2org form the notebooks parse.
+
+    publicdata serves CAIDA's raw export: `Organization` rows carrying name and country,
+    and `ASN` rows carrying an asn, joined by `organizationId`. The notebooks expect one
+    row per organisation with `orgName`, `country` and a `members` list -- which is what
+    the in-cluster mirror holds. Staging rebuilds it so the notebooks need no change.
+    """
+    # Sniff rather than trust the suffix: the download lands as a .part file.
+    with raw_path.open("rb") as probe:
+        gzipped = probe.read(2) == b"\x1f\x8b"
+    opener = gzip.open if gzipped else open
+    with opener(raw_path, "rt", encoding="utf-8") as fin:
+        records = [json.loads(line) for line in fin if line.strip()]
+    orgs = {r["organizationId"]: r for r in records if r.get("type") == "Organization"}
+    members = {}
+    for record in records:
+        if record.get("type") == "ASN":
+            members.setdefault(record["organizationId"], []).append(record["asn"])
+    with out_path.open("w", encoding="utf-8") as fout:
+        for org_id, asns in members.items():
+            org = orgs.get(org_id, {})
+            fout.write(json.dumps({"orgName": org.get("name", ""),
+                                   "country": org.get("country", ""),
+                                   "members": asns}) + "\n")
+    return sum(len(a) for a in members.values())
+
+
+TRANSFORMS = {"as2org-flatten": as2org_flatten}
+
+
+def stage_one(dataset, pins, dest_dir, source, force=False):
+    """Put one dataset into dest_dir. Returns a one-line status."""
+    name = dataset.staged_name(**pins)
+    target = dest_dir / name
+    if target.exists() and not force:
+        return f"{name}  present"
+
+    url = dataset.mirror_url(**pins) if source == "nrp" else dataset.url(**pins)
+    transform = dataset.stage.get("transform")
+    dest_dir.mkdir(parents=True, exist_ok=True)
+
+    # Download beside the target, then move into place, so an interrupted run never
+    # leaves a half-file that the next run reports as `present`.
+    scratch = target.with_suffix(target.suffix + ".part")
+    try:
+        urllib.request.urlretrieve(url, scratch)
+    except (urllib.error.URLError, OSError, ValueError) as exc:
+        scratch.unlink(missing_ok=True)
+        hint = ""
+        if source == "nrp":
+            hint = " (the mirror resolves only inside the NRP cluster)"
+        return f"{name}  FAILED: {exc}{hint}"
+
+    if transform and source != "nrp":
+        # The mirror already holds the transformed form; only the public file needs it.
+        if transform not in TRANSFORMS:
+            scratch.unlink(missing_ok=True)
+            return f"{name}  FAILED: unknown transform {transform!r}"
+        try:
+            count = TRANSFORMS[transform](scratch, target)
+        except (OSError, ValueError, KeyError) as exc:
+            scratch.unlink(missing_ok=True)
+            target.unlink(missing_ok=True)
+            return f"{name}  FAILED: {transform}: {exc}"
+        scratch.unlink(missing_ok=True)
+        return f"{name}  built from {url.rsplit('/', 1)[-1]} ({count} ASNs)"
+
+    scratch.replace(target)
+    return f"{name}  {target.stat().st_size / 1e6:.1f} MB"
+
+
+def cmd_data(args):
+    """Stage each selected module's datasets into that module's own data/ directory.
+
+    Per repo rather than a shared cache because the notebooks use relative paths --
+    `Path("data/as2org.jsonl")` -- so this is what makes a staged file visible to them.
+    """
+    root = find_root(args.root)
+    datasets = nids_registry.load_datasets()
+    assignments, codes = select(args)
+    source = "nrp" if args.nrp else "local"
+
+    print(f"root:   {root}")
+    print(f"source: {source}"
+          f"{'  (in-cluster mirror)' if source == 'nrp' else '  (publicdata / open web)'}\n")
+
+    staged = failed = 0
+    for code, assignment in assignments.items():
+        if codes and code not in codes:
+            continue
+        repo = root / assignment.repo if assignment.repo else None
+        wanted = [(datasets[e["id"]], assignment.pins_for(e["id"]))
+                  for e in assignment.datasets
+                  if e["id"] in datasets and datasets[e["id"]].stage]
+        if not wanted:
+            continue
+        print(f"{code}")
+        if repo is None or not repo.is_dir():
+            print(f"  skipped -- {assignment.repo} is not cloned under {root}")
+            continue
+        for dataset, pins in wanted:
+            if code not in dataset.stage.get("into", [code]):
+                continue
+            line = stage_one(dataset, pins, repo / "data", source, args.force)
+            print(f"  {line}")
+            if "FAILED" in line:
+                failed += 1
+            else:
+                staged += 1
+        print()
+
+    print(f"{staged} staged, {failed} failed")
+    if failed:
+        print("Nothing else fetches these -- the notebook will try its own download and "
+              "hit the same error.")
+    return 1 if failed else 0
+
+
 def cmd_doctor(args):
     """discover, then hand the reachability question to the dedicated checker.
 
@@ -313,6 +437,7 @@ def main(argv=None):
         ("discover", cmd_discover, "report what is cloned and what state it is in"),
         ("doctor", cmd_doctor, "discover, plus a dataset reachability pass"),
         ("env", cmd_env, "build one environment that runs the selected modules"),
+        ("data", cmd_data, "stage each module's datasets into its own data/ directory"),
     ):
         p = sub.add_parser(name, help=help_text)
         p.add_argument("--assignment", action="append", metavar="CODE",
@@ -320,6 +445,11 @@ def main(argv=None):
         p.add_argument("--release", metavar="TIER",
                        help="limit to a release tier, e.g. r1 (default: every module)")
         p.set_defaults(handler=handler)
+        if name == "data":
+            p.add_argument("--nrp", action="store_true",
+                           help="fetch from the in-cluster mirror instead of the open web")
+            p.add_argument("--force", action="store_true",
+                           help="restage files that are already present")
         if name != "env":
             continue
         p.add_argument("--path", metavar="DIR",

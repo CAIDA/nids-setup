@@ -36,6 +36,7 @@ required and never fail the run.
 
 import argparse
 import importlib
+import json
 import os
 import socket
 import sys
@@ -98,6 +99,29 @@ def http_head(url, timeout=60):
     req = urllib.request.Request(url, method="HEAD")
     with urllib.request.urlopen(req, timeout=timeout) as response:
         return response.status, response.headers
+
+
+def first_json_record(url, limit=1 << 20, timeout=60):
+    """Parse the first JSON-lines record of a (possibly gzipped) URL.
+
+    Reads a prefix rather than the whole file -- these run against multi-megabyte
+    downloads and the first record answers the question.
+    """
+    import gzip
+    import io
+    request = urllib.request.Request(url, headers={"Range": f"bytes=0-{limit - 1}"})
+    with urllib.request.urlopen(request, timeout=timeout) as response:
+        blob = response.read(limit)
+    if blob[:2] == b"\x1f\x8b":
+        # A truncated gzip stream raises at the end; the first member is all we need.
+        try:
+            blob = gzip.GzipFile(fileobj=io.BytesIO(blob)).read()
+        except (OSError, EOFError) as exc:
+            if not blob:
+                raise RuntimeError(f"could not decompress {url}: {exc}") from None
+            blob = gzip.GzipFile(fileobj=io.BytesIO(blob)).read1()
+    line = blob.split(b"\n", 1)[0]
+    return json.loads(line)
 
 
 def http_first_bytes(url, n=64, timeout=60):
@@ -221,6 +245,19 @@ def run_check(dataset, required_default=True):
             head = http_first_bytes(url, len(magic))
             assert head.startswith(magic), f"expected {magic.hex()}, got {head.hex()}"
             c.note = f"magic ok, {url.rsplit('/', 1)[-1]}"
+
+        elif kind == "http-fields":
+            # Magic bytes prove the file is the right *format*, never the right content.
+            # caida-as2org passed `http-magic` for a week while serving a schema no
+            # notebook could read, so a dataset whose records the notebooks parse by name
+            # declares those names here and the first record has to carry them.
+            url = dataset.url()
+            record = first_json_record(url)
+            missing = [f for f in spec["fields"] if f not in record]
+            assert not missing, (
+                f"first record is missing {', '.join(missing)} -- "
+                f"has {', '.join(sorted(record))}")
+            c.note = f"fields ok ({', '.join(spec['fields'])})"
 
         elif kind in ("magic", "readable"):
             magic = bytes.fromhex(spec["magic"]) if kind == "magic" else None

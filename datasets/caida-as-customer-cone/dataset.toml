@@ -37,6 +37,12 @@ serial = "20260501"
 
 # The in-cluster mirror check. Retained, but not run today -- nothing dispatches a second
 # check per dataset yet. Re-adding a hub-side mirror pass is Track B.
+# How `nids-setup.py data` puts this on disk. `filename` is what the notebook expects to
+# find in its own data/ directory, so a staged file makes the notebook's download a no-op.
+[stage]
+filename = "{serial}.ppdc-ases.txt.bz2"
+into = ["ASN", "BGP"]
+
 [check]
 section = "ceph"
 order = 10

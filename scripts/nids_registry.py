@@ -63,6 +63,7 @@ class Dataset:
         self.access = data.get("access", {})
         self.defaults = data.get("defaults", {})
         self._check = data.get("check", {})
+        self.stage = data.get("stage", {})
 
     @property
     def public_coordinate(self):
@@ -110,6 +111,19 @@ class Dataset:
         *mirror* lives, and is irrelevant once we are resolving publicdata instead.
         """
         return bool(self.public_coordinate) or self.served_from != "ceph-only"
+
+    def staged_name(self, **pins):
+        """Filename this dataset takes in a repo's data/ directory, or None."""
+        template = self.stage.get("filename")
+        if not template:
+            return None
+        values = dict(self.defaults)
+        values.update({k: v for k, v in pins.items() if v is not None})
+        try:
+            return template.format(**values)
+        except KeyError as exc:
+            raise KeyError(f"{self.id}: [stage].filename needs a pin for "
+                           f"{exc.args[0]!r}") from None
 
     def resolve(self, **pins):
         """Fill the access template. Assignment pins win over the dataset defaults.

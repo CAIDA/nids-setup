@@ -16,3 +16,12 @@ z-*
 .claude/settings.local.json
 .DS_Store
 __pycache__/
+
+# The environment `nids-setup.py env` builds.
+.venv/
+
+# Generated requirements. The release tiers are committed -- they are the reviewable
+# record of what a release installs -- but ad-hoc subsets from `env --assignment` are not.
+env/requirements-*.txt
+!env/requirements-r1.txt
+!env/requirements-all.txt

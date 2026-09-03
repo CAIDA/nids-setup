@@ -1,8 +1,76 @@
 # nids-setup
 
-Instructions for setting up and running NIDS ([CAIDA NIDS project](https://www.caida.org/projects/nids/)) on the National Research Platform (NRP). Covers getting access to NRP, running a JupyterHub for the NIDS assignments, and reaching the data those assignments use.
+Setup for the NIDS assignments ([CAIDA NIDS project](https://www.caida.org/projects/nids/)) —
+on your own machine, or on the National Research Platform (NRP).
 
-## Start here: whose hub will you use?
+## Quickstart
+
+One command clones the module repositories, builds a Python environment for them, and downloads
+their data. Pick the line that matches where you are running:
+
+```bash
+git clone https://github.com/CAIDA/nids-setup.git
+cd nids-setup
+
+./setup.sh --local      # your own laptop or desktop
+./setup.sh --nrp        # a terminal on NRP's JupyterHub
+```
+
+Then:
+
+```bash
+source .venv/bin/activate          # --local only; on NRP the hub supplies the environment
+jupyter lab ..                     # the module repos are cloned beside nids-setup
+```
+
+Open any module's notebook and run it. There is no manual download step.
+
+### What the two modes differ on
+
+| | `--local` | `--nrp` |
+|---|---|---|
+| Data source | `publicdata.caida.org` and other open-web endpoints | NRP's in-cluster mirror |
+| Python | a `.venv` this script builds | the hub image, already provisioned |
+| Needs a CAIDA account | no | an NRP account |
+
+`--local` is the one to use if you are not sure. It needs no CAIDA affiliation and no NRP access.
+
+### Useful variations
+
+```bash
+./setup.sh --local --modules ASN,BGP      # just these two modules
+./setup.sh --local --root ~/nids          # put the module repos somewhere specific
+./setup.sh --local --python python3.12    # build the environment with a specific interpreter
+./setup.sh --local --skip-data            # clone and build the environment only
+```
+
+Re-running is safe — each step skips what is already done.
+
+### If something goes wrong
+
+```bash
+python3 scripts/nids-setup.py --root .. discover   # what is cloned, and its state
+python3 scripts/check-datasets.py --release r1     # is every dataset reachable from here
+```
+
+`setup.sh` is a thin wrapper: each step is also a subcommand you can run alone
+(`scripts/clone-nids-repos.sh`, `nids-setup.py env`, `nids-setup.py data`), which is the
+quickest way to redo just the part that failed.
+
+**Python 3.11 or newer** is needed to read the registry. Building the environment additionally
+needs an interpreter with `venv` support — some system Python builds ship without it, and
+`--python` is how you point at one that has it.
+
+## Which modules this covers
+
+Release 1 is **ASN**, **BGP**, **DNS** and **IYP**. The other six modules read data that is not
+publicly downloadable, or is pinned to periods that are no longer re-fetchable, and they are
+deliberately out of scope for now rather than missing — `assignments/registry.toml` records why
+for each one, and `nids-setup.py env --release r1` and friends will not touch them.
+
+---
+
+## Running on NRP: whose hub will you use?
 
 Everything below branches on one decision, so make it first.
 

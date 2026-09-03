@@ -42,6 +42,15 @@ verified = "2026-08-27"
 [defaults]
 serial = "20260801"         # [unverified] -- see the note above; the mirror carries no date
 
+# See the customer cone's [stage] block. `transform` is the difference between the two:
+# publicdata serves CAIDA's raw two-record format (Organization / ASN rows joined by
+# organizationId), while the notebooks parse the flattened one-row-per-organisation form
+# the Ceph mirror carries. Staging rebuilds that form rather than changing the notebooks.
+[stage]
+filename = "as2org.jsonl"
+into = ["ASN", "BGP"]
+transform = "as2org-flatten"
+
 [check]
 section = "ceph"
 order = 20
@@ -49,9 +58,13 @@ label = "ceph: as2org (ASN, BGP)"
 # No magic bytes: this is also test.ipynb's proof that the Ceph gateway works at all.
 kind = "readable"
 
+# Fields rather than magic bytes. This dataset is why `http-fields` exists: the gzip
+# magic passed for a week while publicdata served CAIDA's raw two-record export, which
+# no notebook can read. `nids-setup.py data` rebuilds the flattened form, and these are
+# the names it joins on -- if publicdata's schema moves, this check fails first.
 [check.public]
 section = "external"
 order = 31
 label = "publicdata: as2org (ASN, BGP)"
-kind = "http-magic"
-magic = "1f8b"              # gzip
+kind = "http-fields"
+fields = ["organizationId", "type"]
