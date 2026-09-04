@@ -77,11 +77,13 @@ def repo_state(path):
     try:
         branch = subprocess.run(
             ["git", "-C", str(path), "rev-parse", "--abbrev-ref", "HEAD"],
-            capture_output=True, text=True, timeout=10,
+            capture_output=True, text=True, encoding="utf-8", errors="replace",
+            timeout=10,
         ).stdout.strip() or "detached"
         dirty = subprocess.run(
             ["git", "-C", str(path), "status", "--porcelain"],
-            capture_output=True, text=True, timeout=10,
+            capture_output=True, text=True, encoding="utf-8", errors="replace",
+            timeout=10,
         ).stdout.strip()
     except (OSError, subprocess.SubprocessError):
         return "unreadable"
@@ -221,7 +223,8 @@ def venv_python(path):
 
 def run_or_die(cmd, message):
     """Run a subprocess quietly; on failure print its output and exit with `message`."""
-    done = subprocess.run(cmd, capture_output=True, text=True)
+    done = subprocess.run(cmd, capture_output=True, text=True,
+                          encoding="utf-8", errors="replace")
     if done.returncode != 0:
         sys.stderr.write(done.stdout + done.stderr)
         raise SystemExit(message)
@@ -272,7 +275,7 @@ def cmd_env(args):
         return 0
 
     req_path.parent.mkdir(parents=True, exist_ok=True)
-    req_path.write_text(text)
+    req_path.write_text(text, encoding="utf-8", newline="\n")
     if args.requirements_only:
         return 0
 
@@ -321,7 +324,7 @@ def as2org_flatten(raw_path, out_path):
     for record in records:
         if record.get("type") == "ASN":
             members.setdefault(record["organizationId"], []).append(record["asn"])
-    with out_path.open("w", encoding="utf-8") as fout:
+    with out_path.open("w", encoding="utf-8", newline="\n") as fout:
         for org_id, asns in members.items():
             org = orgs.get(org_id, {})
             fout.write(json.dumps({"orgName": org.get("name", ""),
@@ -437,7 +440,8 @@ def github_token():
     if shutil.which("gh"):
         try:
             done = subprocess.run(["gh", "auth", "token"],
-                                  capture_output=True, text=True, timeout=15)
+                                  capture_output=True, text=True,
+                                  encoding="utf-8", errors="replace", timeout=15)
             if done.returncode == 0 and done.stdout.strip():
                 return done.stdout.strip()
         except (OSError, subprocess.SubprocessError):
@@ -449,7 +453,8 @@ def git(*args, **kwargs):
     """Run git, capturing output. GIT_TERMINAL_PROMPT=0 so a private repo fails rather
     than hanging on a password prompt -- which on Windows is a GUI dialog nobody sees."""
     env = dict(os.environ, GIT_TERMINAL_PROMPT="0")
-    return subprocess.run(["git", *args], capture_output=True, text=True, env=env, **kwargs)
+    return subprocess.run(["git", *args], capture_output=True, text=True,
+                          encoding="utf-8", errors="replace", env=env, **kwargs)
 
 
 NO_ACCESS = ("not found", "denied", "authentication", "could not read username")

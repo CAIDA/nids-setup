@@ -86,7 +86,7 @@ def packages_for(release):
                 names.append(pkg)
     base = nids_registry.repo_root() / "env" / "base.txt"
     if base.exists():
-        for line in base.read_text().splitlines():
+        for line in base.read_text(encoding="utf-8").splitlines():
             pkg = line.split(";")[0].split("#")[0].strip()
             if pkg and pkg not in names:
                 names.insert(0, pkg)

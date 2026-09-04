@@ -235,7 +235,7 @@ def load_datasets(root=None):
     base = repo_root(root) / "datasets"
     found = {}
     for path in sorted(base.glob("*/dataset.toml")):
-        data = tomllib.loads(path.read_text())
+        data = tomllib.loads(path.read_text(encoding="utf-8"))
         if data.get("schema") != 1:
             raise SystemExit(f"{path}: unsupported schema {data.get('schema')!r}, expected 1")
         if data["id"] != path.parent.name:
@@ -255,7 +255,7 @@ def load_assignments(root=None, release=None):
     path = repo_root(root) / "assignments" / "registry.toml"
     if not path.exists():
         return {}
-    data = tomllib.loads(path.read_text())
+    data = tomllib.loads(path.read_text(encoding="utf-8"))
     data.pop("schema", None)
     found = {code: Assignment(code, block) for code, block in data.items()}
     if release in (None, "all"):
@@ -302,7 +302,7 @@ def base_requirements(root=None):
     if not path.exists():
         return []
     return [
-        line.strip() for line in path.read_text().splitlines()
+        line.strip() for line in path.read_text(encoding="utf-8").splitlines()
         if line.strip() and not line.lstrip().startswith("#")
     ]
 
