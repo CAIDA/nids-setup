@@ -205,7 +205,9 @@ def packages_in(text):
 def activate_hint(target):
     """The line a user types to activate `target`, in their platform's shell."""
     if os.name == "nt":
-        return f"{target}\\Scripts\\activate"
+        # Activate.ps1, not activate.bat: PowerShell resolves the bare name to the .bat,
+        # which sets its variables in a child cmd process and so silently does nothing.
+        return f"{target}\\Scripts\\Activate.ps1"
     return f"source {target}/bin/activate"
 
 

@@ -17,7 +17,7 @@ Then one line — pick the one that matches where you are:
 
 | | run this | then activate with |
 |---|---|---|
-| **Windows** | `setup.cmd --local` | `.venv\Scripts\activate` |
+| **Windows** | `.\setup.cmd --local` | `.venv\Scripts\Activate.ps1` |
 | **macOS / Linux** | `./setup.sh --local` | `source .venv/bin/activate` |
 | **NRP JupyterHub** | `./setup.sh --nrp` | nothing — the hub supplies the environment |
 
@@ -52,7 +52,7 @@ identically on all three; only the launcher's name and the activation line diffe
 ./setup.sh --local --skip-data            # clone and build the environment only
 ```
 
-On Windows substitute `setup.cmd` for `./setup.sh`; the options are the same.
+On Windows substitute `.\setup.cmd` for `./setup.sh`; the options are the same.
 
 Re-running is safe — each step skips what is already done.
 
