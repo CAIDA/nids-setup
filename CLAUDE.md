@@ -4,6 +4,7 @@ Instructions and tooling for running NIDS ([CAIDA NIDS project](https://www.caid
 
 ## Directory structure
 
+- `setup.sh` / `setup.cmd` — the launchers, for Unix and Windows respectively. **Neither holds any logic**: both call `scripts/nids-setup.py setup` and pass every argument through, so there is one implementation of setup shared by all platforms. Add options to the subcommand, never to a launcher, and never let the two diverge.
 - `docs/` — setup guides, numbered in reading order: `1_kubectl_install.md`, `2_nrp_namespace.md`, `3_kubectl_config.md`, `4_nrp_jupyterhub.md`, `5_verify_hub.md`. Plus `0_build_images.md`, which sits *outside* that chain: it is maintainer-only (build and publish the image), and the reader path starts at doc 1 because the image is already published.
 - `DESIGN.md` — the standing design brief: what is being built, the decisions and their rationale, assignment coverage, and open questions. See below for when to read it.
 - `image/` — container image for the hub: `Dockerfile` + `requirements.txt` (union of the assignment deps).
@@ -13,7 +14,7 @@ Instructions and tooling for running NIDS ([CAIDA NIDS project](https://www.caid
 - `assignments/` — `registry.toml`, one block per assignment: repos, environment (with an `[X.environment.key]` overlay for the answer-key repo), and the pins it supplies for each dataset it reads. Assignments pin placeholders, never URLs.
 - `setup.sh` — the one command a first-time user runs: `--local` (public data, builds a venv) or `--nrp` (in-cluster mirror, hub supplies the environment). A thin wrapper over the three steps below, each of which also stands alone.
 - `env/` — `base.txt`, the packages every module needs, and the generated `requirements-<tier>.txt` that `nids-setup.py env` writes by unioning it with each module's `[<CODE>.environment].extra`. Only the release tiers are committed; ad-hoc subsets are gitignored.
-- `scripts/` — `build-push.sh`, which builds `image/` with `docker buildx` and pushes both tags (see `docs/0_build_images.md`), `check-datasets.py`, the laptop-side counterpart to `check-datasets.ipynb`, `nids_registry.py`, the loader for both registries (`--validate` cross-checks them, `--repos` lists a release's repos for the cloner), `clone-nids-repos.sh`, which clones module repos either from the registry (`--release` / `--modules`, no token needed) or by enumerating the whole CAIDA org (token required), and `nids-setup.py`, the assignment setup entry point (`discover`, `doctor`, `env`, `data`; `verify` not yet written).
+- `scripts/` — `build-push.sh`, which builds `image/` with `docker buildx` and pushes both tags (see `docs/0_build_images.md`), `check-datasets.py`, the laptop-side counterpart to `check-datasets.ipynb`, `nids_registry.py`, the loader for both registries (`--validate` cross-checks them, `--repos` lists a release's repos for the cloner), `clone-nids-repos.sh`, which enumerates the whole CAIDA org and clones what matches (token required) — a maintainer tool, not part of anyone's setup path — and `nids-setup.py`, the setup entry point (`setup`, `clone`, `discover`, `doctor`, `env`, `data`; `verify` not yet written).
 
 ## When to read DESIGN.md
 
@@ -57,4 +58,4 @@ The nearest things to one are `scripts/nids_registry.py --validate`, which cross
 registries offline and exits non-zero on a dangling reference (run it after touching either), and
 `scripts/check-datasets.py`, which checks dataset reachability and exits non-zero if a *required*
 dataset is unreachable. The other executables are `scripts/build-push.sh`, which builds and
-publishes the container image, and `scripts/clone-nids-repos.sh`, which fetches the repos.
+publishes the container image, and `scripts/clone-nids-repos.sh`, which enumerates the org.

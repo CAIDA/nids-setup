@@ -6,24 +6,31 @@ on your own machine, or on the National Research Platform (NRP).
 ## Quickstart
 
 One command clones the module repositories, builds a Python environment for them, and downloads
-their data. Pick the line that matches where you are running:
+their data.
 
 ```bash
 git clone https://github.com/CAIDA/nids-setup.git
 cd nids-setup
-
-./setup.sh --local      # your own laptop or desktop
-./setup.sh --nrp        # a terminal on NRP's JupyterHub
 ```
 
-Then:
+Then one line — pick the one that matches where you are:
 
-```bash
-source .venv/bin/activate          # --local only; on NRP the hub supplies the environment
+| | run this | then activate with |
+|---|---|---|
+| **Windows** | `setup.cmd --local` | `.venv\Scripts\activate` |
+| **macOS / Linux** | `./setup.sh --local` | `source .venv/bin/activate` |
+| **NRP JupyterHub** | `./setup.sh --nrp` | nothing — the hub supplies the environment |
+
+Finally:
+
+```
 jupyter lab ..                     # the module repos are cloned beside nids-setup
 ```
 
 Open any module's notebook and run it. There is no manual download step.
+
+Both launchers call the same `scripts/nids-setup.py setup`, so every option below works
+identically on all three; only the launcher's name and the activation line differ.
 
 ### What the two modes differ on
 
@@ -32,34 +39,39 @@ Open any module's notebook and run it. There is no manual download step.
 | Data source | `publicdata.caida.org` and other open-web endpoints | NRP's in-cluster mirror |
 | Python | a `.venv` this script builds | the hub image, already provisioned |
 | Needs a CAIDA account | no | an NRP account |
+| Works on Windows | yes | you are in a Linux container already |
 
 `--local` is the one to use if you are not sure. It needs no CAIDA affiliation and no NRP access.
 
 ### Useful variations
 
-```bash
+```
 ./setup.sh --local --modules ASN,BGP      # just these two modules
 ./setup.sh --local --root ~/nids          # put the module repos somewhere specific
 ./setup.sh --local --python python3.12    # build the environment with a specific interpreter
 ./setup.sh --local --skip-data            # clone and build the environment only
 ```
 
+On Windows substitute `setup.cmd` for `./setup.sh`; the options are the same.
+
 Re-running is safe — each step skips what is already done.
 
 ### If something goes wrong
 
-```bash
-python3 scripts/nids-setup.py --root .. discover   # what is cloned, and its state
-python3 scripts/check-datasets.py --release r1     # is every dataset reachable from here
+```
+python scripts/nids-setup.py discover --release r1   # what is cloned, and its state
+python scripts/check-datasets.py --release r1        # is every dataset reachable from here
 ```
 
-`setup.sh` is a thin wrapper: each step is also a subcommand you can run alone
-(`scripts/clone-nids-repos.sh`, `nids-setup.py env`, `nids-setup.py data`), which is the
-quickest way to redo just the part that failed.
+`setup.sh` and `setup.cmd` are launchers and hold no logic. Each step is also a subcommand you
+can run alone — `nids-setup.py clone`, `env`, `data` — which is the quickest way to redo just
+the part that failed.
 
-**Python 3.11 or newer** is needed to read the registry. Building the environment additionally
-needs an interpreter with `venv` support — some system Python builds ship without it, and
-`--python` is how you point at one that has it.
+**Python 3.11 or newer** is needed to read the registry, and **git** must be on your PATH.
+Building the environment additionally needs an interpreter with `venv` support — some system
+Python builds ship without it, and `--python` is how you point at one that has it. On Windows,
+install Python from [python.org](https://www.python.org/downloads/windows/) and tick *Add
+python.exe to PATH*; `setup.cmd` finds it through the `py` launcher or `python`.
 
 ## Which modules this covers
 

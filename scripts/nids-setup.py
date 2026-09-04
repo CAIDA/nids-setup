@@ -23,6 +23,7 @@ Root directory, in order: --root, $NIDS_ROOT, the parent of this checkout.
 """
 
 import argparse
+import concurrent.futures
 import gzip
 import json
 import os
@@ -170,7 +171,7 @@ def print_survey(root, rows, unknown, assignments, codes=None):
 
 
 def cmd_discover(args):
-    root = find_root(args.root)
+    root = find_root(getattr(args, "root", None))
     datasets = nids_registry.load_datasets()
     assignments, codes = select(args)
     rows, unknown = survey(root, datasets, assignments, codes)
@@ -199,6 +200,13 @@ def packages_in(text):
     """The requirement lines of a requirements file, without comments or blanks."""
     return [line for line in text.splitlines()
             if line.strip() and not line.lstrip().startswith("#")]
+
+
+def activate_hint(target):
+    """The line a user types to activate `target`, in their platform's shell."""
+    if os.name == "nt":
+        return f"{target}\\Scripts\\activate"
+    return f"source {target}/bin/activate"
 
 
 def venv_python(path):
@@ -286,7 +294,7 @@ def cmd_env(args):
                    "could not register the Jupyter kernel")
         print(f"kernel:       nids-{slug}")
 
-    print(f"\nactivate with:  source {target}/bin/activate")
+    print(f"\nactivate with:  {activate_hint(target)}")
     if not args.register_kernel:
         print("register a Jupyter kernel for it with --register-kernel")
     return 0
@@ -370,7 +378,7 @@ def cmd_data(args):
     Per repo rather than a shared cache because the notebooks use relative paths --
     `Path("data/as2org.jsonl")` -- so this is what makes a staged file visible to them.
     """
-    root = find_root(args.root)
+    root = find_root(getattr(args, "root", None))
     datasets = nids_registry.load_datasets()
     assignments, codes = select(args)
     source = "nrp" if args.nrp else "local"
@@ -411,6 +419,221 @@ def cmd_data(args):
     return 1 if failed else 0
 
 
+# --- clone -------------------------------------------------------------------------
+# Registry mode only: the repo list is a known set of names read from
+# assignments/registry.toml, so this makes no GitHub API call and needs no token. The
+# organisation-listing mode -- which does need curl, jq and a token -- stays in
+# scripts/clone-nids-repos.sh, because it is a maintainer tool rather than something a
+# person setting up a module ever runs.
+
+
+def github_token():
+    """A token if one is available, else None. Only affects which protocol we clone over."""
+    for name in ("GITHUB_TOKEN", "GH_TOKEN"):
+        if os.environ.get(name):
+            return os.environ[name]
+    if shutil.which("gh"):
+        try:
+            done = subprocess.run(["gh", "auth", "token"],
+                                  capture_output=True, text=True, timeout=15)
+            if done.returncode == 0 and done.stdout.strip():
+                return done.stdout.strip()
+        except (OSError, subprocess.SubprocessError):
+            pass
+    return None
+
+
+def git(*args, **kwargs):
+    """Run git, capturing output. GIT_TERMINAL_PROMPT=0 so a private repo fails rather
+    than hanging on a password prompt -- which on Windows is a GUI dialog nobody sees."""
+    env = dict(os.environ, GIT_TERMINAL_PROMPT="0")
+    return subprocess.run(["git", *args], capture_output=True, text=True, env=env, **kwargs)
+
+
+NO_ACCESS = ("not found", "denied", "authentication", "could not read username")
+
+
+def sync_one(name, url, ref, root, dry_run):
+    """Clone or fast-forward one repo. Returns a one-line report, never raises.
+
+    Idempotent: an existing checkout is fetched and fast-forwarded, never reset, and one
+    with local changes or a diverged branch is reported and left exactly as it is. This
+    has to be safe to re-run in a directory someone is working in.
+    """
+    dest = root / name
+    if not dest.is_dir():
+        if dry_run:
+            return f"{name:<42} would clone"
+        done = git("clone", "--quiet", url, str(dest))
+        if done.returncode == 0:
+            if ref:
+                git("-C", str(dest), "checkout", "--quiet", ref)
+            return f"{name:<42} cloned" + (f" at {ref}" if ref else "")
+        err = (done.stderr or done.stdout).strip()
+        if any(marker in err.lower() for marker in NO_ACCESS):
+            return f"{name:<42} no access (private, or no token)"
+        first = err.splitlines()[0] if err else "unknown error"
+        return f"{name:<42} CLONE FAILED: {first}"
+    if not (dest / ".git").is_dir():
+        return f"{name:<42} skipped (not a git checkout)"
+    if git("-C", str(dest), "status", "--porcelain").stdout.strip():
+        return f"{name:<42} skipped (uncommitted changes)"
+    if dry_run:
+        return f"{name:<42} would fetch"
+    git("-C", str(dest), "fetch", "--quiet", "--all", "--prune")
+    if git("-C", str(dest), "merge", "--ff-only", "--quiet", "@{u}").returncode == 0:
+        return f"{name:<42} updated"
+    return f"{name:<42} left alone (diverged or no upstream)"
+
+
+def cmd_clone(args):
+    """Clone or update the module repos named by the registry."""
+    if not shutil.which("git"):
+        raise SystemExit("git is not installed, or not on PATH -- install it and re-run.\n"
+                         "Windows: https://git-scm.com/download/win (choose 'Git from the "
+                         "command line').")
+    assignments, codes = select(args)
+    root = find_root(getattr(args, "root", None))
+    root.mkdir(parents=True, exist_ok=True)
+    root = root.resolve()
+
+    token = github_token()
+    # https is anonymous, so it is the right default only when we have no credentials.
+    proto = args.proto or ("https" if not token else "ssh")
+
+    wanted = []
+    for code, assignment in assignments.items():
+        if codes and code not in codes:
+            continue
+        roles = [assignment.repo]
+        if args.include_key:
+            roles.append(assignment.key_repo)
+        for name in roles:
+            if name:
+                url = (f"git@github.com:{args.org}/{name}.git" if proto == "ssh"
+                       else f"https://github.com/{args.org}/{name}.git")
+                wanted.append((name, url, assignment.ref or ""))
+    if not wanted:
+        raise SystemExit("no modules matched")
+    if args.include_key and not token:
+        raise SystemExit("--include-key needs a GitHub token; every *-key repo is private")
+
+    tier = args.release or "all"
+    scope = f"{tier}, modules {','.join(sorted(codes))}" if codes else tier
+    print(f"source: assignments/registry.toml ({scope})")
+    print(f"root:   {root}")
+    print(f"proto:  {proto}")
+    if not token:
+        print("auth:   none -- private modules will be reported and skipped")
+    if args.dry_run:
+        print("mode:   dry run")
+    print()
+
+    # Threads, not processes: every worker is waiting on git, and the results are
+    # collected in registry order rather than finish order so the report is stable.
+    with concurrent.futures.ThreadPoolExecutor(max_workers=args.jobs) as pool:
+        reports = list(pool.map(
+            lambda item: sync_one(*item, root, args.dry_run), wanted))
+    for line in reports:
+        print(line)
+
+    failed = sum(1 for line in reports if "CLONE FAILED" in line)
+    noaccess = sum(1 for line in reports if "no access" in line)
+    print(f"\n{len(wanted)} repositories in {root}")
+    # `no access` is the expected outcome for someone without CAIDA membership, so it is
+    # not a failure. A clone that broke for any other reason is.
+    if noaccess:
+        print(f"{noaccess} repository/ies you cannot read were skipped")
+    if failed:
+        sys.stderr.write(f"{failed} clone(s) FAILED -- nothing downstream will work "
+                         "until they succeed\n")
+        return 1
+    return 0
+
+
+# --- setup -------------------------------------------------------------------------
+# The one command: clone, then environment, then data. Each step is also a subcommand
+# you can run on its own, and this only sequences them -- so there is one implementation
+# of each step, shared by every platform. setup.sh and setup.cmd are launchers that call
+# straight through to here and hold no logic of their own.
+
+
+class Selection:
+    """The module selection, in the form each subcommand's parser expects."""
+
+    def __init__(self, release, modules):
+        self.release = release
+        self.assignment = modules or None
+
+
+def cmd_setup(args):
+    """Clone the module repos, build one environment, and stage their data."""
+    modules = ([m.strip().upper() for m in args.modules.split(",") if m.strip()]
+               if args.modules else None)
+    root = find_root(getattr(args, "root", None))
+    sel = Selection(args.release, modules)
+
+    skip_env, env_note = args.skip_env, "skipped (--skip-env)"
+    if args.mode == "nrp" and not skip_env:
+        # The hub image already carries every package; building a venv there would
+        # shadow it and confuse the kernel the notebook actually runs in.
+        skip_env, env_note = True, "skipped on NRP -- the hub image already provides the packages"
+
+    where = f"{args.mode}, release {args.release}"
+    if modules:
+        where += f", modules {','.join(modules)}"
+    print("=" * 62)
+    print(f" NIDS setup -- {where}")
+    print(f" repos go in: {root}")
+    print("=" * 62)
+
+    print("\n--- 1/3  cloning module repositories -------------------------")
+    clone_args = argparse.Namespace(
+        root=getattr(args, "root", None), release=args.release, assignment=sel.assignment,
+        include_key=False, proto=None, org="CAIDA", jobs=args.jobs, dry_run=False)
+    if cmd_clone(clone_args) != 0:
+        sys.stderr.write(
+            "\nStopping: the module repositories did not clone, so there is nothing to "
+            "build\nan environment for or to download data into. Fix the errors above and "
+            "re-run;\nthis script picks up where it left off.\n")
+        return 1
+
+    print("\n--- 2/3  building the Python environment ---------------------")
+    venv = nids_registry.repo_root() / ".venv"
+    if skip_env:
+        print(env_note)
+    else:
+        env_args = argparse.Namespace(
+            root=getattr(args, "root", None), release=args.release, assignment=sel.assignment,
+            path=None, python=args.python, requirements_only=False,
+            register_kernel=False, dry_run=False)
+        status = cmd_env(env_args)
+        if status:
+            return status
+
+    print("\n--- 3/3  staging data ----------------------------------------")
+    if args.skip_data:
+        print("skipped (--skip-data)")
+    else:
+        data_args = argparse.Namespace(
+            root=getattr(args, "root", None), release=args.release, assignment=sel.assignment,
+            nrp=(args.mode == "nrp"), force=False)
+        status = cmd_data(data_args)
+        if status:
+            return status
+
+    print()
+    print("=" * 62)
+    print(" Done. Next:")
+    if not skip_env:
+        print(f"   {activate_hint(venv)}")
+        print(f"   jupyter lab {root}")
+    else:
+        print("   open a module's notebook in JupyterHub")
+    print("=" * 62)
+    return 0
+
+
 def cmd_doctor(args):
     """discover, then hand the reachability question to the dedicated checker.
 
@@ -434,17 +657,55 @@ def main(argv=None):
     sub = parser.add_subparsers(dest="command", required=True)
 
     for name, handler, help_text in (
+        ("setup", cmd_setup, "clone, build an environment, and stage data -- the one command"),
+        ("clone", cmd_clone, "clone or update the module repos named by the registry"),
         ("discover", cmd_discover, "report what is cloned and what state it is in"),
         ("doctor", cmd_doctor, "discover, plus a dataset reachability pass"),
         ("env", cmd_env, "build one environment that runs the selected modules"),
         ("data", cmd_data, "stage each module's datasets into its own data/ directory"),
     ):
         p = sub.add_parser(name, help=help_text)
+        # Also accepted after the subcommand, so `setup.sh --root DIR` works -- the
+        # launchers pass every argument through after the subcommand name. SUPPRESS so an
+        # unused subcommand default cannot overwrite a value given before it.
+        p.add_argument("--root", default=argparse.SUPPRESS,
+                       help="directory holding the cloned repos")
         p.add_argument("--assignment", action="append", metavar="CODE",
                        help="limit to one assignment code; repeatable")
         p.add_argument("--release", metavar="TIER",
-                       help="limit to a release tier, e.g. r1 (default: every module)")
+                       help="limit to a release tier, e.g. r1"
+                            + (" (default: r1)" if name == "setup" else " (default: every module)"))
         p.set_defaults(handler=handler)
+        if name == "setup":
+            # --release carries a default here and nowhere else: `setup` is the command a
+            # newcomer runs, and it should mean "set up the shipping release".
+            p.set_defaults(release="r1")
+            where = p.add_mutually_exclusive_group(required=True)
+            where.add_argument("--local", dest="mode", action="store_const", const="local",
+                               help="set up on your own machine, using public data")
+            where.add_argument("--nrp", dest="mode", action="store_const", const="nrp",
+                               help="set up on NRP's JupyterHub, using the in-cluster mirror")
+            p.add_argument("--modules", metavar="A,B",
+                           help="only these modules (default: everything in the release)")
+            p.add_argument("--python", metavar="EXE",
+                           help="interpreter to build the environment with "
+                                "(not the one running this)")
+            p.add_argument("--jobs", type=int, default=4, metavar="N",
+                           help="parallel clones (default: 4)")
+            p.add_argument("--skip-env", action="store_true",
+                           help="do not build a Python environment")
+            p.add_argument("--skip-data", action="store_true",
+                           help="do not download data")
+        if name == "clone":
+            p.add_argument("--include-key", action="store_true",
+                           help="also clone the answer-key repos (needs a GitHub token)")
+            p.add_argument("--proto", choices=("ssh", "https"),
+                           help="clone protocol (default: https anonymously, ssh with a token)")
+            p.add_argument("--org", default="CAIDA", help="GitHub organisation")
+            p.add_argument("--jobs", type=int, default=4, metavar="N",
+                           help="parallel clones (default: 4)")
+            p.add_argument("--dry-run", action="store_true",
+                           help="print what would happen, change nothing")
         if name == "data":
             p.add_argument("--nrp", action="store_true",
                            help="fetch from the in-cluster mirror instead of the open web")
