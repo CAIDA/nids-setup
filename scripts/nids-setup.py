@@ -6,14 +6,16 @@
   scripts/nids-setup.py doctor --assignment BGP
   scripts/nids-setup.py env --release r1      one environment that runs every r1 notebook
   scripts/nids-setup.py data --release r1     stage each module's data into its data/ dir
+  scripts/nids-setup.py verify --release r1   run the key notebooks; what is ready to hand out
 
 The repos come from scripts/clone-nids-repos.sh; the metadata comes from the two
 registries (datasets/<id>/dataset.toml and assignments/registry.toml, documented in
 datasets/SCHEMA.md).
 
 `discover` and `doctor` are read-only. `env` writes a generated requirements file and, unless
---dry-run, a virtual environment. `data` writes into each module's data/ directory. `verify` is
-still to be written; see PLAN.md phase 4.
+--dry-run, a virtual environment. `data` writes into each module's data/ directory. `verify`
+executes notebooks but saves nothing -- it needs the -key repos, which are private, so it is an
+instructor-side command.
 
 Module selection is the same on every subcommand: --release picks a whole tier (r1 is the
 four modules that read only public data), --assignment picks individual codes, and the two
@@ -424,6 +426,239 @@ def cmd_data(args):
     return 1 if failed else 0
 
 
+# --- verify ------------------------------------------------------------------------
+# The acceptance gate: one command answering "which modules are ready to hand out".
+# Instructor-side by construction -- what it runs lives in the private -key repos, so a
+# student running this correctly finds nothing to run (D3).
+
+# Run inside the built environment, not this interpreter, because that is the
+# environment the notebook will actually run in -- verifying anything else verifies the
+# wrong thing. Kept as source text rather than a file next to this one so `verify` stays
+# a single-file change; it is passed to `python -c`.
+NOTEBOOK_RUNNER = r'''
+import json, re, sys
+import nbformat
+from nbclient import NotebookClient
+from nbclient.exceptions import CellExecutionError
+
+path, timeout = sys.argv[1], int(sys.argv[2])
+nb = nbformat.read(path, as_version=4)
+# resources.metadata.path is the notebook's working directory. The notebooks use
+# relative paths -- Path("data/as2org.jsonl") -- so this is what makes staged data
+# visible to them.
+client = NotebookClient(nb, timeout=timeout, resources={"metadata": {"path": "."}})
+result = {"cells": sum(1 for c in nb.cells if c.cell_type == "code"), "lines": [],
+          "error": None, "kernel": None}
+# IPython colours tracebacks; this report is plain text and read in logs.
+ANSI = re.compile(r"\x1b\[[0-9;]*m")
+try:
+    client.execute()
+except CellExecutionError as exc:
+    # The last line is the exception itself. The frames above it are about the
+    # notebook's own code, which the person running verify is about to open anyway.
+    result["error"] = ANSI.sub("", str(exc)).strip().splitlines()[-1]
+except Exception as exc:
+    result["error"] = ANSI.sub("", f"{exc.__class__.__name__}: {exc}")
+# Which interpreter the kernel actually ran in. Jupyter resolves the kernelspec by name
+# through its own search path, where a *user* kernelspec outranks this environment's --
+# so "we launched the venv's python" does not by itself prove the notebook ran there.
+# jupyter_client substitutes sys.executable for a bare "python"/"pythonN" argv[0], which
+# is what this environment's own spec holds; anything else is a real answer to report.
+# Resolved from the kernelspec directly rather than from the client, which drops its
+# kernel manager once execution finishes -- reading it there returns None and the check
+# silently never fires.
+try:
+    from jupyter_client.kernelspec import KernelSpecManager
+    name = nb.metadata.get("kernelspec", {}).get("name") or "python3"
+    argv0 = KernelSpecManager().get_kernel_spec(name).argv[0]
+    bare = ("python", "python3", "python%i" % sys.version_info[0],
+            "python%i.%i" % sys.version_info[:2])
+    result["kernel"] = sys.executable if argv0 in bare else argv0
+except Exception:
+    pass
+# The shared check runner prints "[ ok ] ...", "[FAIL] ...", "[warn] ..."; collect those
+# from whatever ran, including the cells before a failure.
+for cell in nb.cells:
+    for output in cell.get("outputs", []):
+        text = output.get("text") or ""
+        for line in text.splitlines():
+            if line.startswith(("[ ok ]", "[FAIL]", "[warn]")):
+                result["lines"].append(line.rstrip())
+print("\n__NIDS_VERIFY__" + json.dumps(result))
+'''
+
+
+def printable(text):
+    """Make one line of notebook output safe for whatever console this is.
+
+    A notebook can print anything; a console cannot print anything -- the encoder is
+    cp1252 on Windows and ascii under `LC_ALL=C`, and one unencodable character in a
+    captured line would abort the whole run with UnicodeEncodeError. Same locale-encoding
+    class as the file I/O fixed on 2026-09-04, one layer further out: this is the only
+    text here that does not come from the registry, so it is the only text that needs it.
+    """
+    encoding = sys.stdout.encoding or "utf-8"
+    return text.encode(encoding, "replace").decode(encoding, "replace")
+
+
+def check_target(assignment, key_path):
+    """Which notebook `verify` should run for one module, and why.
+
+    Returns (path, kind, note). The registry names a `check` notebook per module, but for
+    every release-1 module that notebook is either declared absent (IYP, D8) or named and
+    not actually in the repo [verified 2026-09-04 -- ASN and BGP key repos have never held
+    one, on any branch]. Falling back to the module's own key notebook is what keeps this
+    command from being inert for the whole release: running it end to end is the check
+    that caught the BGP key's missing `import pandas as pd`.
+    """
+    named = assignment.check_notebook
+    if named:
+        candidate = key_path / named
+        if candidate.exists():
+            return candidate, "check", ""
+        note = f"registry names {named}, which is not in the repo"
+    else:
+        note = "module ships no environment check"
+    fallback = key_path / f"{key_path.name}.ipynb"
+    if fallback.exists():
+        return fallback, "notebook", note
+    return None, "none", note
+
+
+def run_notebook(python, notebook, timeout):
+    """Execute one notebook headlessly in `python`'s environment. Returns the runner's dict.
+
+    Nothing is written back: the executed copy stays in memory, so a `-key` checkout is
+    the same after this as before it.
+    """
+    done = subprocess.run(
+        [str(python), "-c", NOTEBOOK_RUNNER, notebook.name, str(timeout)],
+        cwd=str(notebook.parent), capture_output=True, text=True,
+        encoding="utf-8", errors="replace",
+    )
+    for line in done.stdout.splitlines():
+        if line.startswith("__NIDS_VERIFY__"):
+            return json.loads(line[len("__NIDS_VERIFY__"):])
+    # The runner itself did not get far enough to report -- a missing nbclient, or the
+    # interpreter failing to start. Its own stderr is the only useful thing here.
+    tail = (done.stderr or done.stdout).strip().splitlines()
+    return {"cells": 0, "lines": [], "kernel": None,
+            "error": tail[-1] if tail else f"the notebook runner exited {done.returncode}"}
+
+
+def cmd_verify(args):
+    """Run each selected module's key notebook and report which modules are ready.
+
+    Serial on purpose: these notebooks parse multi-hundred-megabyte RIBs, and running four
+    of them at once turns a memory limit into a confusing failure.
+    """
+    root = find_root(getattr(args, "root", None))
+    assignments, codes = select(args)
+    tier = args.release or "all"
+
+    venv = pathlib.Path(args.path).expanduser().resolve() if args.path \
+        else nids_registry.repo_root() / ".venv"
+    # Absolute either way: the notebook runs with its own repo as the working directory,
+    # so a relative interpreter path -- or a bare name found on PATH -- would not resolve
+    # there. shutil.which handles both forms.
+    python = pathlib.Path(shutil.which(args.python) or args.python).resolve() \
+        if args.python else venv_python(venv)
+    if python is None:
+        # sys.executable would run the notebooks in whatever interpreter launched this,
+        # which is not the environment `env` built and not what a module will use.
+        raise SystemExit(
+            f"no environment at {venv} -- run `nids-setup.py env --release {tier}` first, "
+            "or pass --python to name an interpreter that has the modules' packages.")
+
+    print(f"root:    {root}")
+    print(f"python:  {python}")
+    print(f"timeout: {args.timeout}s per notebook\n")
+
+    results = []
+    for code, assignment in assignments.items():
+        if codes and code not in codes:
+            continue
+        if not assignment.key_repo:
+            results.append((code, "warn", "no key repo in the registry"))
+            continue
+        key_path = root / assignment.key_repo
+        if not key_path.is_dir():
+            # Expected for a student, and for anyone without org access: the key repos are
+            # private. Never a failure -- D3.
+            results.append((code, "warn", f"{assignment.key_repo} is not cloned under {root}"))
+            continue
+        notebook, kind, note = check_target(assignment, key_path)
+        if notebook is None:
+            results.append((code, "warn", f"no check available -- {note}"))
+            continue
+
+        label = f"{notebook.parent.name}/{notebook.name}"
+        if args.dry_run:
+            results.append((code, "skip", f"would run {label}"))
+            continue
+
+        print(printable(f"{code}: running {label}"
+                        + (f"  ({kind}; {note})" if note else f"  ({kind})")))
+        outcome = run_notebook(python, notebook, args.timeout)
+        ran_in = outcome.get("kernel")
+        if ran_in and pathlib.Path(ran_in) != python:
+            # Not fatal -- the notebook may well pass -- but it means this run did not
+            # test the environment it was asked to test, which is the whole point.
+            print(f"  [warn] the kernel ran in {ran_in}, not {python}")
+        for line in outcome["lines"]:
+            print(f"  {printable(line)}")
+        # A check notebook's runner *swallows* the exception and prints "[FAIL]" -- it is
+        # built that way so the remaining checks still run. So executing to the end is not
+        # the same as passing, and reading only the exception would be the skip-reads-as-
+        # pass mistake again.
+        reported = [line for line in outcome["lines"] if line.startswith("[FAIL]")]
+        cells = f"{outcome['cells']} code cell" + ("s" if outcome["cells"] != 1 else "")
+        tally = ""
+        if outcome["lines"]:
+            warned = sum(1 for line in outcome["lines"] if line.startswith("[warn]"))
+            tally = (f"; {len(outcome['lines'])} checks, {len(reported)} failed"
+                     + (f", {warned} warned" if warned else ""))
+        if outcome["error"] or reported:
+            detail = outcome["error"] or f"{len(reported)} check(s) reported FAIL"
+            if "rook-ceph-rgw-nautiluss3.rook" in detail:
+                # The in-cluster mirror does not resolve off NRP, and the notebooks only
+                # fetch when nothing is staged -- so this error means the data step, not
+                # the network, is what is missing.
+                detail += (f"  -- data is not staged; run `nids-setup.py data "
+                           f"--assignment {code}`")
+            detail = printable(detail)
+            results.append((code, "fail", detail))
+            print(f"  [FAIL] {detail}")
+        else:
+            results.append((code, "ok", f"{cells}, no errors{tally}"))
+            print(f"  [ ok ] {cells}, no errors{tally}")
+        print()
+
+    print("-" * 62)
+    for code, state, detail in results:
+        tag = {"ok": "[ ok ]", "fail": "[FAIL]", "warn": "[warn]", "skip": "[skip]"}[state]
+        print(f"{tag} {code:11} {detail}")
+
+    if args.dry_run:
+        print("\n--dry-run: nothing was executed")
+        return 0
+
+    failed = [c for c, s, _ in results if s == "fail"]
+    ready = [c for c, s, _ in results if s == "ok"]
+    print()
+    if failed:
+        print(f"NOT ready to hand out: {', '.join(failed)}")
+        return 1
+    if not ready:
+        # Every module warned. Saying "all green" here would be the skip-reads-as-pass
+        # mistake the dataset checker already made once.
+        print(f"nothing was verified -- no key repo under {root} had a notebook to run")
+        return 0
+    print(f"ready to hand out ({tier}): {', '.join(ready)}"
+          + (f"; {len(results) - len(ready)} not verified, see above" if len(ready) != len(results) else ""))
+    return 0
+
+
 # --- clone -------------------------------------------------------------------------
 # Registry mode only: the repo list is a known set of names read from
 # assignments/registry.toml, so this makes no GitHub API call and needs no token. The
@@ -670,6 +905,7 @@ def main(argv=None):
         ("doctor", cmd_doctor, "discover, plus a dataset reachability pass"),
         ("env", cmd_env, "build one environment that runs the selected modules"),
         ("data", cmd_data, "stage each module's datasets into its own data/ directory"),
+        ("verify", cmd_verify, "run each key repo's notebook and report what is ready to hand out"),
     ):
         p = sub.add_parser(name, help=help_text)
         # Also accepted after the subcommand, so `setup.sh --root DIR` works -- the
@@ -713,6 +949,15 @@ def main(argv=None):
                            help="parallel clones (default: 4)")
             p.add_argument("--dry-run", action="store_true",
                            help="print what would happen, change nothing")
+        if name == "verify":
+            p.add_argument("--path", metavar="DIR",
+                           help="the environment to run in (default: <nids-setup>/.venv)")
+            p.add_argument("--python", metavar="EXE",
+                           help="interpreter to run the notebooks with, instead of --path's")
+            p.add_argument("--timeout", type=int, default=900, metavar="SECONDS",
+                           help="per-notebook time limit (default: 900)")
+            p.add_argument("--dry-run", action="store_true",
+                           help="print which notebook each module would run, run nothing")
         if name == "data":
             p.add_argument("--nrp", action="store_true",
                            help="fetch from the in-cluster mirror instead of the open web")

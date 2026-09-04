@@ -180,9 +180,17 @@ Both paths run the same notebook, but not the same amount of it:
   `singleuser.profileList`, because the memory envelope is the one result that changes between
   profiles.
 
-Instructors on either path should also run each assignment's `00-environment-check.ipynb` from its
-answer-key repo before handing that assignment out — the guide's Step 6 lists them and what each
-one touches.
+Instructors on either path should run this before handing an assignment out:
+
+```
+python scripts/nids-setup.py verify --release r1
+```
+
+It executes each module's answer-key notebook headlessly in the environment `env` built and prints
+one line per module — which are ready to hand out, and what failed on the ones that are not. It
+needs the `-key` repos, which are private, so it is an instructor-side command; a module whose key
+is not cloned is reported as unverified rather than failed. Nothing is written back to the key
+repos.
 
 ## For maintainers
 

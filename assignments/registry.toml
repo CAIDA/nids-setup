@@ -26,7 +26,10 @@ repo = "nids-asn-introduction"
 key_repo = "nids-asn-introduction-key"
 release = "r1"        # issue #1 -- both datasets on publicdata.caida.org; the only pure-publicdata module
 status = "active"
-check = "00-environment-check.ipynb"
+check = "00-environment-check.ipynb"   # [verified 2026-09-04] named by Brad's
+                            # convention, but no such file exists in nids-asn-introduction-key on any
+                            # branch or commit. `verify` reports this and runs the key
+                            # notebook instead. See PLAN.md phase 4c.
 
 [ASN.environment]
 # [verified] 2026-09-03: the standard library plus IPython, no %pip line. IPython comes
@@ -47,7 +50,10 @@ repo = "nids-bgp-control-plane"
 key_repo = "nids-bgp-control-plane-key"
 release = "r1"        # issue #2 -- publicdata x2 plus RouteViews via OSDF
 status = "active"
-check = "00-environment-check.ipynb"
+check = "00-environment-check.ipynb"   # [verified 2026-09-04] named by Brad's
+                            # convention, but no such file exists in nids-bgp-control-plane-key on any
+                            # branch or commit. `verify` reports this and runs the key
+                            # notebook instead. See PLAN.md phase 4c.
 profile = true
 memory = { guarantee = "4Gi", limit = "8Gi", verified = false }
 
