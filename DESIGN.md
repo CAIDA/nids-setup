@@ -133,7 +133,7 @@ now added but its database not yet deployed.
 
 | Assignment | Profile | Image deps | Notes |
 |---|---|---|---|
-| `nids-bgp-control-plane` | ✅ | ✅ **[verified]** | Its notebook has since landed: `%pip install pybgpkit-parser pelicanfs pytricia pandas` plus `matplotlib`, all already in `requirements.txt`. The earlier inference from `Datasets.md` was right. |
+| `nids-bgp-control-plane` | ✅ | ✅ **[verified]** | Its notebook has since landed: `%pip install pybgpkit-parser pelicanfs pytricia pandas` plus `matplotlib`, all already in `requirements.txt`. The earlier inference from `Datasets.md` was right. **`pytricia` was replaced by `py-radix` on 2026-09-04 [verified]** — see "Why py-radix, not pytricia" below. |
 | `nids-telescope-traffic` | ✅ | ✅ **[verified]** | Pins its own `requirements.txt`. Highest memory profile. |
 | `nids-dns-ecosystem` | ✅ | ✅ **[verified]** | Only assignment using Spark. |
 | `nids-iyp` | ❌ not yet | ✅ `neo4j`, `python-dotenv` added | **Blocked on a Neo4j instance** — see below. `nids-iyp.ipynb` does not exist yet, so deps come from its `requirements.txt`/`pyproject.toml`, not real imports. |
@@ -307,6 +307,34 @@ TELESCOPE (#6) and UCSDNT (#7) wait, and are revisited one at a time.
   `<YYYYMMDD>.as-org2info.jsonl.gz`, already JSONL. Repointing therefore introduces a
   *serial pin the notebooks never made* (defaulted to `20260801`). Closing this needs one
   diff run on the hub, where the Ceph object is readable.
+
+
+## Why py-radix, not pytricia (2026-09-04)
+
+`pytricia` publishes **no wheels at all** — one sdist, so pip compiles a C extension on
+every platform. That is invisible on Linux and macOS, where a compiler is usually present,
+and fatal on a stock Windows machine, which has none. It is what stopped the first beta
+tester **[verified]**.
+
+`py-radix` 1.1.0 ships binary wheels for **cp39–cp314 × win32 / win_amd64 / macosx /
+manylinux / musllinux** **[verified, PyPI JSON API, 2026-09-04]**. Same data structure, same
+purpose, and it imports as `radix`.
+
+**The swap is behaviour-preserving [verified].** The BGP key notebook's
+`count_addresses_per_asn` was run both ways over flat, nested, grandchild, skip-level,
+sibling and host-route prefix shapes, 300 random prefixes, and 200,000 random prefixes:
+**identical output in every case**.
+
+**Verified on the real RouteViews RIB**: 1,097,143 single-origin IPv4 prefixes, 77,985 ASNs, total 3,102,561,212 addresses attributed — **identical dictionaries**. Timing on that data is pytricia 2.8 s to py-radix's 3.6 s; on synthetic data the order reversed. Both are ~3 s inside a notebook cell that takes minutes to reach, so the difference does not matter — but the earlier claim that py-radix is *faster* was drawn from synthetic prefixes only and does not hold on real ones.
+
+**The one API difference** is that py-radix has no `.parent()`. It is derived from
+`search_covering(p)`, which returns ancestors most-specific-first **and includes `p`
+itself** — so the immediate parent is the first entry that is not `p`. Forgetting that
+filter is the one way this swap can silently produce wrong answers; it is why the
+equivalence test above exists rather than a code review.
+
+`scripts/check-wheels.py` was added at the same time so this class of problem is caught
+when a dependency is *added* rather than by a tester on an unrepresented platform.
 
 ## Open questions
 

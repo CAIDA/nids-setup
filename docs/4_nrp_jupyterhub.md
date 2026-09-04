@@ -95,12 +95,12 @@ Dataset paths, provenance, and provisioning are **not** repeated here — they l
 assignments. What follows is only what bears on the hub itself.
 
 ### nids-bgp-control-plane (BGP)
-- **Libraries:** `pybgpkit-parser` (import as `pybgpkit_parser`), `pelicanfs`, `pytricia`, `pandas`, `matplotlib`. Pure Python — **no Spark**.
+- **Libraries:** `pybgpkit-parser` (import as `pybgpkit_parser`), `pelicanfs`, `py-radix`, `pandas`, `matplotlib`. Pure Python — **no Spark**.
 - **Data:** [routeviews-bgp-rib](../datasets/routeviews-bgp-rib/), [caida-as-customer-cone](../datasets/caida-as-customer-cone/), [caida-as2org](../datasets/caida-as2org/).
 - **Prerequisite assignment:** `nids-asn-introduction` (ASN) — reads the same two Ceph objects; add a profile for it the same way if you teach it.
 
 ### nids-telescope-traffic (TELESCOPE)
-- **Libraries:** `dpkt`, `pandas`, `pyarrow`, `pybgpkit-parser`, `pelicanfs`, `pytricia`, `geoip2`, `maxminddb`, `matplotlib`. No Spark.
+- **Libraries:** `dpkt`, `pandas`, `pyarrow`, `pybgpkit-parser`, `pelicanfs`, `py-radix`, `geoip2`, `maxminddb`, `matplotlib`. No Spark.
 - **Data:** [ucsd-nt-pcap-samples](../datasets/ucsd-nt-pcap-samples/), [maxmind-geolite2](../datasets/maxmind-geolite2/), [routeviews-bgp-rib](../datasets/routeviews-bgp-rib/) for origin-AS enrichment.
 - **Caveat:** highest memory profile; process each capture one at a time (don't hold both flow maps in memory at once).
 

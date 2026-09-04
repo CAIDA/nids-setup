@@ -87,10 +87,14 @@ Three things in there are load-bearing:
 - **`--platform linux/amd64` is not optional.** NRP's nodes are predominantly x86, and an arm64 image
   fails at pod start with `exec format error` — a failure that surfaces only when a student tries to
   spawn a server. Always build amd64, whatever your laptop is.
-- **On Apple Silicon that means QEMU emulation, so expect a slow first build.** Compiling `pytricia`'s
-  C extension and the Spark dependency set under emulation takes far longer than native. It does
-  work. If the wait is unacceptable, build on an x86 host or attach a remote amd64 builder
-  (`docker buildx create --name amd64 --driver docker-container <remote> --use`).
+- **On Apple Silicon that means QEMU emulation, so expect a slow first build.** Installing the
+  Spark dependency set under emulation takes far longer than native — `pyspark` alone is a large
+  source distribution. It does work. If the wait is unacceptable, build on an x86 host or attach a
+  remote amd64 builder (`docker buildx create --name amd64 --driver docker-container <remote> --use`).
+  Note that since `pytricia` was replaced by `py-radix` (2026-09-04) **nothing in
+  `requirements.txt` compiles**: every package is either pure Python or has an amd64 wheel, so the
+  old "compiling a C extension under emulation" cost is gone. `scripts/check-wheels.py` re-checks
+  that claim.
 - **`--provenance=false`** keeps the push a plain single-architecture manifest. Without it `buildx`
   attaches attestations and publishes an image index instead, which some registry and container-runtime
   combinations handle poorly.
@@ -107,7 +111,7 @@ Locally, that the dependency set imports:
 
 ```bash
 docker run --rm --platform linux/amd64 "$IMAGE:latest" \
-  python -c "import pyspark, dpkt, pytricia, pybgpkit_parser, pelicanfs, neo4j; print('ok')"
+  python -c "import pyspark, dpkt, radix, pybgpkit_parser, pelicanfs, neo4j; print('ok')"
 ```
 
 Then from the cluster, which additionally proves the pull path and the CPU architecture:
@@ -115,7 +119,7 @@ Then from the cluster, which additionally proves the pull path and the CPU archi
 ```bash
 kubectl run nids-hub-smoke -n <YOUR_NAMESPACE> --rm -it --restart=Never \
   --image="$IMAGE:latest" \
-  --command -- python -c "import pyspark, dpkt, pytricia, pybgpkit_parser, pelicanfs, neo4j; print('ok')"
+  --command -- python -c "import pyspark, dpkt, radix, pybgpkit_parser, pelicanfs, neo4j; print('ok')"
 ```
 
 > `ImagePullBackOff` means the cluster can't pull the image — either the repo is private and has no
@@ -193,7 +197,7 @@ This image has not yet been built end to end, so treat the first run as its acce
 
 | Symptom | Cause | Fix |
 | --- | --- | --- |
-| `error: command 'gcc' failed` | `pytricia` is source-only with a C extension and the base lacks a compiler | Add `build-essential` in a root `RUN apt-get` layer before the pip install |
+| `error: command 'gcc' failed` | a source-only dependency needs a compiler the base lacks | Add `build-essential` in a root `RUN apt-get` layer before the pip install |
 | `exec format error` at pod start | Image built for the wrong CPU architecture | You omitted `--platform linux/amd64`; rebuild with it. Optionally also pin `nodeSelector` to `amd64` in `values.yaml` |
 | Build crawls on Apple Silicon | `linux/amd64` runs under QEMU emulation | Expected. Build on an x86 host, or attach a remote amd64 builder with `docker buildx create` |
 | `no space left on device` | Extracted base + compiled deps + JARs need well over 10 GB | `docker system prune -a` and raise Docker Desktop's disk image size (Settings → Resources) |

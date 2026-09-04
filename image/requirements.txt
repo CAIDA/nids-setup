@@ -1,9 +1,9 @@
 # Python dependencies for the combined NIDS JupyterHub image.
 #
 # This is the union of the assignment key notebooks' actual imports:
-#   - nids-bgp-control-plane : pybgpkit-parser, pelicanfs, pytricia, pandas, matplotlib
+#   - nids-bgp-control-plane : pybgpkit-parser, pelicanfs, py-radix, pandas, matplotlib
 #   - nids-telescope-traffic : dpkt, pandas, pyarrow, pybgpkit-parser, pelicanfs,
-#                              pytricia, geoip2, maxminddb, matplotlib
+#                              py-radix, geoip2, maxminddb, matplotlib
 #   - nids-dns-ecosystem     : pyspark, tldextract, dnspython, numpy, requests, matplotlib
 #   - nids-iyp               : neo4j, python-dotenv, pandas, matplotlib
 #
@@ -18,7 +18,10 @@ pyarrow>=14.0
 matplotlib>=3.5
 geoip2>=4.7
 maxminddb>=2.5
-pytricia>=1.0
+# py-radix, NOT pytricia: pytricia is source-only, so it needs a compiler on every
+# platform and has no Windows wheel at all. py-radix ships cp39-cp314 wheels for
+# win32/win_amd64, macOS and manylinux/musllinux. Imports as `radix`.
+py-radix>=1.1
 pelicanfs>=1.0
 pybgpkit-parser>=0.18   # import as `import pybgpkit_parser as bgpkit` (NOT `import bgpkit`)
 

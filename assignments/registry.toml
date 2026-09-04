@@ -53,7 +53,7 @@ memory = { guarantee = "4Gi", limit = "8Gi", verified = false }
 
 [BGP.environment]
 # [verified] from the notebook's own %pip line.
-extra = ["pybgpkit-parser", "pelicanfs", "pytricia", "pandas", "matplotlib"]
+extra = ["pybgpkit-parser", "pelicanfs", "py-radix", "pandas", "matplotlib"]
 
 [[BGP.datasets]]
 id = "routeviews-bgp-rib"

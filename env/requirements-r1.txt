@@ -2,7 +2,7 @@
 # selection: r1
 # Sources: env/base.txt and [<CODE>.environment].extra in assignments/registry.toml.
 #   ASN          (base only)
-#   BGP          pybgpkit-parser, pelicanfs, pytricia, pandas, matplotlib
+#   BGP          pybgpkit-parser, pelicanfs, py-radix, pandas, matplotlib
 #   DNS          pyspark, tldextract, dnspython, matplotlib, numpy, requests
 #   IYP          neo4j, pandas, python-dotenv
 
@@ -14,7 +14,7 @@ tomli; python_version < "3.11"
 # --- modules ---
 pybgpkit-parser
 pelicanfs
-pytricia
+py-radix
 pandas
 matplotlib
 pyspark
