@@ -30,6 +30,7 @@ import gzip
 import json
 import os
 import pathlib
+import re
 import shutil
 import subprocess
 import sys
@@ -157,7 +158,7 @@ def print_survey(root, rows, unknown, assignments, codes=None):
         if code in shown and a.status not in ("stub", "offsite") and not a.check_notebook
     ]
     if missing_checks:
-        # DESIGN.md tracks this: for IYP it is a real gap, since it targets JupyterHub.
+        # For IYP this is a real gap rather than a nicety, since it targets JupyterHub.
         print(f"no 00-environment-check.ipynb: {', '.join(missing_checks)}")
 
     blocked = {code: a.raw.get("blocked_on") for code, a in assignments.items()
@@ -204,6 +205,37 @@ def packages_in(text):
     """The requirement lines of a requirements file, without comments or blanks."""
     return [line for line in text.splitlines()
             if line.strip() and not line.lstrip().startswith("#")]
+
+
+# Java is not a Python package, and `pyspark` is only a wrapper around a JVM: pip installs
+# it happily on a machine with no `java`, and the failure then surfaces as a Spark stack
+# trace at notebook run time, long after setup looked like it worked. Checking here turns
+# that into one line while the user is still in the terminal that could fix it.
+JVM_PACKAGE = "pyspark"
+
+
+def requirement_name(line):
+    """The bare package name from a requirements line, without marker or specifier."""
+    return re.split(r"[;\[<>=!~ ]", line.strip(), maxsplit=1)[0].lower()
+
+
+def java_runtime():
+    """The `java` this machine would run, or None. JAVA_HOME wins over PATH, as on a JVM."""
+    home = os.environ.get("JAVA_HOME")
+    if home:
+        candidate = (pathlib.Path(home) / "bin"
+                     / ("java.exe" if os.name == "nt" else "java"))
+        if candidate.is_file():
+            return str(candidate)
+    return shutil.which("java")
+
+
+def jvm_modules(assignments, codes):
+    """Selected modules whose dependencies need a JVM, in registry order."""
+    return [code for code, a in assignments.items()
+            if (not codes or code in codes)
+            and any(requirement_name(pkg) == JVM_PACKAGE
+                    for pkg in a.env_for("assignment").get("extra", []))]
 
 
 def activate_hint(target):
@@ -271,6 +303,21 @@ def cmd_env(args):
     print(f"selection:    {label}")
     print(f"modules:      {', '.join(selected)}")
     print(f"requirements: {req_path.name} ({len(packages)} packages)")
+
+    # Reported for the whole selection, before anything is built: it is a property of what
+    # was asked for, and the other modules in the same selection still work without it.
+    needs_jvm = jvm_modules(assignments, codes)
+    if needs_jvm and not java_runtime():
+        others = [c for c in selected if c not in needs_jvm]
+        print(f"  [warn] {', '.join(needs_jvm)} needs a Java runtime and this machine has "
+              "none --")
+        print(f"         no `java` on PATH, no JAVA_HOME. `{JVM_PACKAGE}` is a wrapper "
+              "around a JVM,")
+        print("         so pip installs it but the notebook fails at run time. Install a "
+              "JDK (17 or")
+        print("         newer), or run that module on NRP's JupyterHub, which has one.")
+        if others:
+            print(f"         Unaffected, and still built by this run: {', '.join(others)}.")
 
     if args.dry_run:
         print("\n" + text)
@@ -345,6 +392,13 @@ def stage_one(dataset, pins, dest_dir, source, force=False):
     if target.exists() and not force:
         return f"{name}  present"
 
+    # A dataset may override the mode's source. as2org needs it: the in-cluster object is
+    # undated and refreshed in place, so reading it on NRP while a local run reads a pinned
+    # serial gives two different answers to the same graded question -- and the notebooks
+    # cannot tell, because the URL carries no version. `source = "public"` in [stage] means
+    # "always the pinned public release", which is what makes a key and a student agree.
+    if dataset.stage.get("source") == "public":
+        source = "local"
     url = dataset.mirror_url(**pins) if source == "nrp" else dataset.url(**pins)
     transform = dataset.stage.get("transform")
     dest_dir.mkdir(parents=True, exist_ok=True)

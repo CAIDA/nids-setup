@@ -40,6 +40,6 @@ requests
 # --- IYP (Internet Yellow Pages) ---
 # pandas + matplotlib are already covered above; jupyterlab comes from the base image.
 # NOTE: the notebook also needs a reachable Neo4j instance and a neo4j_credentials.env
-# file — neither is provided by this image. See DESIGN.md, "Infrastructure beyond the hub".
+# file — neither is provided by this image, and neither is deployed anywhere yet.
 neo4j                   # Neo4j Python driver, connects over bolt://
 python-dotenv           # loads neo4j_credentials.env

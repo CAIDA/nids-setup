@@ -12,7 +12,7 @@
 #
 # Every pin below was read out of the values tables in datasets/<id>/README.md, which
 # cite the notebook and line they came from. Where this file says [unverified], the fact
-# is inferred rather than read from a notebook -- keep that marking, as DESIGN.md does.
+# is inferred rather than read from a notebook -- keep that marking.
 #
 # A repo may override its own block with a `nids.toml` at its root; see docs.
 # Loader: scripts/nids_registry.py
@@ -87,9 +87,8 @@ status = "active"
 check = "00-environment-check.ipynb"
 
 [IRR.environment]
-# [verified] DESIGN.md: py-radix and tqdm are imported by the notebook but are NOT in
-# image/requirements.txt. A local environment built from this block is therefore wider
-# than the hub image -- deliberate, and tracked as a scope decision in DESIGN.md.
+# py-radix and tqdm are imported by the notebook but are NOT in image/requirements.txt,
+# so a local environment built from this block is wider than the hub image. Deliberate.
 extra = ["py-radix", "tqdm"]
 
 [[IRR.datasets]]
@@ -116,12 +115,12 @@ name = "ITDK"
 repo = "nids-itdk"
 key_repo = "nids-itdk-key"
 release = "later"     # issue #4 -- reads a built Postgres database that is unpublished and absent
-status = "blocked"          # no Postgres instance exists -- DESIGN.md, High
+status = "blocked"          # no Postgres instance exists anywhere yet
 blocked_on = "an in-namespace Postgres deployment"
 check = "00-environment-check.ipynb"
 
 [ITDK.environment]
-# [verified] DESIGN.md, from the notebook's imports; also absent from the hub image.
+# From the notebook's imports; also absent from the hub image.
 extra = ["sqlalchemy", "psycopg2-binary", "pycountry", "scipy", "python-dotenv"]
 
 [ITDK.environment.key]

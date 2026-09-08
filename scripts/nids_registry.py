@@ -8,7 +8,7 @@ Two registries, both plain TOML, both living in this repo:
   assignments/registry.toml      one block per assignment -- repos, environment, and the
                                  pins it uses for each dataset it reads
 
-The prose companions (datasets/<id>/README.md, DESIGN.md) keep owning provenance, gotchas,
+The prose companions (datasets/<id>/README.md) keep owning provenance, gotchas,
 and the setup narrative. This module owns none of that; it only resolves coordinates.
 
 Why central rather than per-assignment: the per-assignment copies already drift -- the
@@ -189,7 +189,7 @@ class Assignment:
         self.release = data.get("release", "later")
         self.check_notebook = data.get("check")
         # Optional commit pin, honoured by clone-nids-repos.sh. Unset means track the
-        # module's default branch. See DESIGN.md.
+        # module's default branch.
         self.ref = data.get("ref")
         self.memory = data.get("memory", {})
         self.environment = data.get("environment", {})

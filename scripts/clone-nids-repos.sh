@@ -9,8 +9,8 @@
 # Two modes, differing only in where the repo list comes from. REGISTRY MODE (--release /
 # --modules) reads a known list out of assignments/registry.toml, so it makes no GitHub
 # listing call and needs no token; a repo the user cannot read is reported and skipped.
-# ORG MODE (the default) enumerates the organisation. Why a registry rather than git
-# submodules: DESIGN.md.
+# ORG MODE (the default) enumerates the organisation. A registry is used rather than git
+# submodules so a module can be cloned, skipped or pinned without touching this repo.
 #
 # Org mode requires authentication and deliberately does not make it optional: most
 # nids-* repos are private, and an unauthenticated listing returns a plausible-looking
@@ -21,7 +21,7 @@
 # a bare prefix match would clone every student's submitted work. Only the -key suffix is
 # treated as a real repo; --include-students opts back in.
 #
-# Full walkthrough: docs/6_assignment_setup.md
+# Full walkthrough: the quickstart in README.md
 set -euo pipefail
 
 ORG="CAIDA"

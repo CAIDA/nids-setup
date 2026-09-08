@@ -8,7 +8,7 @@
 Why this exists: a package with no wheel for a platform is compiled from source there,
 which needs a C toolchain. macOS and Linux usually have one, so a source-only dependency
 looks fine on both and then fails on a stock Windows machine -- which is exactly how
-`pytricia` reached a beta tester before anyone noticed (DESIGN.md, "Why py-radix").
+`pytricia` reached a beta tester before anyone noticed, and was replaced by `py-radix`.
 
 Run this when ADDING a dependency to assignments/registry.toml or image/requirements.txt.
 It reads the PyPI JSON API and needs no network access to any package index mirror.
