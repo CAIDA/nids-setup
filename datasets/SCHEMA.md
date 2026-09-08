@@ -1,7 +1,7 @@
 # Registry schema
 
 Two TOML registries hold every coordinate the NIDS tooling needs. They are the
-machine-readable half of what `datasets/*/README.md` and `DESIGN.md` describe in prose;
+machine-readable half of what `datasets/*/README.md` describes in prose;
 neither replaces the other.
 
 | File | One per | Owns |
@@ -177,11 +177,18 @@ release scopes *modules*; the datasets in scope follow from what those modules p
 is why `routeviews-prefix2as` is out of v1 despite being publicly downloadable — its only
 reader is IRR.
 
-## Keeping the marking
+## What belongs in a comment here
 
-`DESIGN.md`'s **[verified]** / **[unverified]** convention applies inside these files too,
-as TOML comments. A pin read out of a notebook is verified; one inferred from a
-requirements file is not. Do not quietly promote one to the other.
+These files are read by instructors setting a module up, so a comment earns its place by
+telling that reader something they can act on: what the dataset is, which release the module
+pins and what changing it affects, or a constraint like a host that resolves only inside the
+NRP cluster.
+
+State such things plainly. The evidence behind a claim — how it was checked, which
+alternatives were weighed, what turned out to be wrong — is a maintenance record and is kept
+outside this repository, so it does not belong in a comment here. A pin whose provenance is
+genuinely uncertain should not be presented as settled either: say what is known, briefly,
+without an audit trail.
 
 Per the rule in the top-level `CLAUDE.md`: a dataset marked `setup = "undocumented"` has
 no recoverable provisioning procedure, and its README's `## Setup` section **must not** be

@@ -3,34 +3,30 @@ id = "caida-as2org"
 name = "CAIDA AS-to-Organization (as2org)"
 used_by = ["ASN", "BGP"]
 produced_by = "caida"
-public = true               # via CAIDA's API; the Ceph object is a NIDS-specific flattening
-public_access = true        # [verified 2026-08-27] publicdata serves JSONL directly, HTTP 200
+public = true
+public_access = true
 served_from = "ceph-only"
-setup = "undocumented"      # ❌ -- the most consequential one: derived, not a verbatim mirror
-time_sensitive = "no"       # stable, undated filename -- a refresh overwrites in place
+setup = "undocumented"
+time_sensitive = "yes"      # the published releases are dated; the in-cluster copy is not,
+                            # which hides its age rather than removing it
 credentials = []
 
+# Two places serve this dataset, and they are not interchangeable.
+#
+# NRP's in-cluster copy, below, is a flattened form built for these assignments. Its key
+# carries no version, so nothing that reads it can report which release it holds. The
+# notebooks fetch it directly when it is the only thing available.
 [access]
 transport = "ceph"
-host = "http://rook-ceph-rgw-nautiluss3.rook"
+host = "http://rook-ceph-rgw-nautiluss3.rook"   # resolves only inside the NRP cluster
 template = "caida/as2org/as2org.jsonl"
 pins = []
 format = "jsonl"
 
-# The open-web coordinate, and the one v1 resolves by default.
-#
-# [verified 2026-08-27] publicdata publishes `<YYYYMMDD>.as-org2info.jsonl.gz`, already
-# JSONL -- records read directly, e.g.
+# CAIDA's public releases, which are dated. This is the coordinate `nids-setup.py data`
+# uses, and the records are read straight from the JSONL:
 #   {"changed":"20171130","country":"US","name":"1-800 Contacts, Inc.",
 #    "organizationId":"1800CO-2-ARIN","source":"ARIN","type":"Organization"}
-#
-# **[unverified]** whether this is byte-for-byte the Ceph object. That object is
-# `as2org.jsonl` -- undated, gzip-free, and described in README.md as a NIDS-specific
-# flattening. Two consequences, both deliberate and both needing a hub-side check to
-# close (PLAN §6):
-#   1. the public file is gzipped where the mirror is not;
-#   2. the mirror is undated, so pinning a serial here is a NEW version choice that the
-#      notebooks never made. 20260801 is the newest published at the time of writing.
 [access.public]
 transport = "https"
 base = "https://publicdata.caida.org/datasets/as-organizations"
@@ -40,28 +36,34 @@ format = "gzip jsonl"
 verified = "2026-08-27"
 
 [defaults]
-serial = "20260801"         # [unverified] -- see the note above; the mirror carries no date
+# Matches the customer cone's pin so ASN reads one vintage across both its datasets.
+#
+# **Changing this changes every country figure the notebooks print, answer keys included.**
+# Re-run the key notebooks if you change it, or the keys will no longer match what a student
+# gets. Nothing else in the module depends on the value.
+serial = "20260501"
 
-# See the customer cone's [stage] block. `transform` is the difference between the two:
-# publicdata serves CAIDA's raw two-record format (Organization / ASN rows joined by
-# organizationId), while the notebooks parse the flattened one-row-per-organisation form
-# the Ceph mirror carries. Staging rebuilds that form rather than changing the notebooks.
+# publicdata serves CAIDA's raw two-record export -- `Organization` rows carrying name and
+# country, `ASN` rows carrying an asn, joined on `organizationId`. The notebooks parse the
+# flattened one-row-per-organisation form instead, so staging rebuilds it; the notebooks need
+# no change either way.
 [stage]
 filename = "as2org.jsonl"
 into = ["ASN", "BGP"]
 transform = "as2org-flatten"
+# Stage the pinned release on NRP too, not just locally. Both venues then read the same dated
+# file, so a graded figure is the same wherever the notebook runs.
+source = "public"
 
 [check]
 section = "ceph"
 order = 20
 label = "ceph: as2org (ASN, BGP)"
-# No magic bytes: this is also test.ipynb's proof that the Ceph gateway works at all.
+# No magic bytes: this doubles as test.ipynb's proof that the Ceph gateway works at all.
 kind = "readable"
 
-# Fields rather than magic bytes. This dataset is why `http-fields` exists: the gzip
-# magic passed for a week while publicdata served CAIDA's raw two-record export, which
-# no notebook can read. `nids-setup.py data` rebuilds the flattened form, and these are
-# the names it joins on -- if publicdata's schema moves, this check fails first.
+# Fields rather than magic bytes: a gzip check passes on the raw export, which no notebook can
+# read. These are the names the rebuild joins on, so this fails first if the schema moves.
 [check.public]
 section = "external"
 order = 31

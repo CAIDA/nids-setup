@@ -16,8 +16,8 @@ in the class namespace. Students query it with SQL rather than parsing the raw f
 
 > **No Postgres instance exists in this repo.** `configs/` carries no manifest and no profile
 > provisions one. An ITDK profile without a database spawns a notebook that cannot connect — the same
-> shape of gap as [iyp-neo4j](../iyp-neo4j/). Tracked in
-> [DESIGN.md](../../DESIGN.md#itdk-needs-a-postgres-instance).
+> shape of gap as [iyp-neo4j](../iyp-neo4j/). **This dataset is not part of release 1**; the
+> assignment is out of scope until an instance exists.
 
 ## Access
 
@@ -180,5 +180,4 @@ table.
 ## See also
 
 - `nids-itdk/Datasets.md`, `nids-itdk/SQL.md`
-- [DESIGN.md](../../DESIGN.md#itdk-needs-a-postgres-instance) — why no instance exists yet
 - [iyp-neo4j](../iyp-neo4j/) — the other database-backed assignment, same shape of gap

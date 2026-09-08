@@ -9,7 +9,7 @@ served_from = "in-namespace"
 setup = "documented"
 time_sensitive = "yes"      # the loader targets a dated release
 credentials = ["ITDK_READ_DSN"]
-# No Postgres instance exists in this repo yet -- DESIGN.md, High priority.
+# No Postgres instance is deployed anywhere yet, so this assignment cannot run.
 deployed = false
 
 [access]

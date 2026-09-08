@@ -71,6 +71,9 @@ the part that failed.
 - **git** on your PATH.
 - An interpreter with **`venv` support**, to build the environment — some system Python builds
   ship without it, and `--python` is how you point at one that has it.
+- **For the DNS module only, a JDK (17 or newer).** Its queries run under Spark, and `pyspark`
+  is a wrapper around a JVM that pip cannot install. `env` says so if one is missing; the other
+  modules are pure Python and need nothing extra.
 
 Installing Python on Windows: get it from [python.org](https://www.python.org/downloads/windows/)
 and tick *Add python.exe to PATH*. `setup.cmd` finds it through the `py` launcher or `python`.
@@ -205,8 +208,3 @@ repos.
   it is reached, and how to check it is still reachable. Also outside the numbered chain: a reader
   following steps 1–5 never needs it, but nobody can stand the data up without it.
 
-## Design notes
-
-[DESIGN.md](DESIGN.md) is the standing brief behind these guides: what is being built, the
-decisions and their rationale, which assignments the image currently supports, and the open
-questions. Read it before changing the image, the profiles, or the build.

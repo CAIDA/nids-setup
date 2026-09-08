@@ -47,7 +47,7 @@ assignment, not a mistake in this table.
 |---|---|---|---|---|---|---|
 | [routeviews-bgp-rib](routeviews-bgp-rib/) | BGP, TELESCOPE | External — RouteViews (U. Oregon) | | Yes | Both — OSDF | Yes — dated month directory |
 | [caida-as-customer-cone](caida-as-customer-cone/) | ASN, BGP | CAIDA | ❌ | Yes | Ceph only | Yes — dated serial filename |
-| [caida-as2org](caida-as2org/) | ASN, BGP | CAIDA | ❌ | Yes | Ceph only | No — stable filename |
+| [caida-as2org](caida-as2org/) | ASN, BGP | CAIDA | ❌ | Yes | Ceph, plus publicdata (what `data` stages) | **Yes — and the filename hides it** |
 | [caida-irr-whois-dumps](caida-irr-whois-dumps/) | IRR | CAIDA — collected from 16 external IRRs | ❌ | Yes | Ceph only | Yes — dated directory |
 | [routeviews-prefix2as](routeviews-prefix2as/) | IRR | CAIDA — derived from RouteViews | ❌ | Yes | Ceph only | Yes — dated path |
 | [ripe-rpki-roas](ripe-rpki-roas/) | IRR | External — RIPE NCC | | Yes | Both — `ftp.ripe.net` | Yes — dated path per trust anchor |
@@ -76,20 +76,27 @@ NRP infrastructure at all.
 ### Six of thirteen datasets have no documented provisioning
 
 Every dataset served from in-cluster Ceph is marked ❌. The objects exist and the assignments read
-them, but nothing in any repo records who put them there, from which upstream source, on what
-cadence, or with which credentials — and four of the six encode a date that will eventually need
-refreshing. That is the largest gap this directory exposes, and it is tracked in
-[DESIGN.md](../DESIGN.md#open-questions). The affected datasets are
+them, but no procedure is written down for who put them there, from which upstream source, or with
+which credentials — so **the in-cluster data cannot currently be rebuilt from scratch by anyone but
+whoever originally staged it.** That matters if you are standing up your own hub: plan on either
+reaching the existing objects or sourcing the data yourself. Five of the six encode a date in their
+path that will eventually need refreshing. The affected datasets are
 [caida-as-customer-cone](caida-as-customer-cone/), [caida-as2org](caida-as2org/),
 [caida-irr-whois-dumps](caida-irr-whois-dumps/), [routeviews-prefix2as](routeviews-prefix2as/),
 [ucsd-nt-pcap-samples](ucsd-nt-pcap-samples/), and [maxmind-geolite2](maxmind-geolite2/).
+
+`caida-as2org` is the one whose path carries **no** date, so nothing reading it can report which
+release it holds. `nids-setup.py data` therefore stages that dataset from CAIDA's dated public
+release on NRP as well as locally — see
+[`caida-as2org/dataset.toml`](caida-as2org/dataset.toml) — so a figure a student computes is the
+same wherever the notebook runs. This is worth knowing if you grade on numeric answers.
 
 Two consequences of the mirror worth stating outright:
 
 - **Redistribution.** The mirror re-serves externally-produced data. GeoLite2 is the pointed case:
   MaxMind normally gates it behind an account and a licence, and the mirror is precisely why the
-  assignment needs neither. Whether the mirror is licensed to re-serve it is an open question, not a
-  detail. **[unverified]**
+  assignment needs neither. Whether the mirror is licensed to re-serve it is an open question, not
+  a detail — if you deploy your own hub, obtain GeoLite2 under your own MaxMind account.
 - **Governance.** UCSD Network Telescope data is CAIDA's own but AUA/DUA-governed, and the raw
   captures stay on SDSC Expanse. The two telescope datasets here are not equivalent:
   [ucsd-nt-pcap-samples](ucsd-nt-pcap-samples/) is an anonymized derivative served openly from Ceph,

@@ -61,8 +61,9 @@ Must be recovered:
 
 - **Whose MaxMind account and licence key** the download uses, and where that key is held.
 - **Whether the GeoLite2 EULA permits re-serving the database** to a class from a CAIDA-operated
-  store. This is the question to answer before the mirror is relied on further; it is tracked in
-  [DESIGN.md](../../DESIGN.md#open-questions).
+  store. This is the question to answer before the mirror is relied on further. If you are
+  standing up your own hub, obtain GeoLite2 under your own MaxMind account rather than assuming
+  this mirror is redistributable.
 - The extraction and renaming steps, exactly enough to reproduce the current filename convention.
 - Who uploads to the Ceph `caida` bucket, with which credentials and tool, and whether the weekly
   upstream rebuild is tracked at all.

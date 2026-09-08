@@ -16,7 +16,8 @@ template = "neo4j://iyp-bolt.ihr.live:7687"
 pins = []
 python_deps = ["neo4j"]
 
-# The instructor's self-hosted instance does not exist yet (DESIGN.md, High).
+# The instructor's self-hosted instance does not exist yet; the student path uses the
+# public instance above and is unaffected.
 [access.self_hosted]
 credentials = ["IYP_READ_URI", "IYP_READ_USER", "IYP_READ_PASSWORD"]
 credentials_file = "neo4j_credentials.env"

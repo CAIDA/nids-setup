@@ -72,8 +72,8 @@ are called out explicitly rather than guessed.
 > to issue a read-only credential — the notebook's keyword filter is a courtesy check, not a security
 > boundary. A hosted hub hands the same shared-trust credential to every student, any one of whom
 > could delete the graph. Weigh restore-from-pinned-dump on a schedule, a read-only replica, or a
-> Bolt-level proxy before going live. See
-> [DESIGN.md](../../DESIGN.md#iyp-needs-a-neo4j-instance--not-yet-built).
+> Bolt-level proxy before going live. **No instance exists yet**, so the instructor path for this
+> module is unbuilt; the student path against the public instance is unaffected.
 
 ### 1. Obtain the IYP dump — **gap**
 
@@ -134,5 +134,4 @@ clearing `/data/databases`, or provisioning a fresh PVC — not simply re-applyi
 
 - `nids-iyp/Datasets.md`, `nids-iyp/Cypher.md`
 - `nids-iyp/checkpoint.md` — the module's own status/handoff record
-- [DESIGN.md](../../DESIGN.md#iyp-needs-a-neo4j-instance--not-yet-built)
 - [itdk-postgres](../itdk-postgres/) — the other database-backed assignment
