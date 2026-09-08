@@ -52,8 +52,6 @@ identically on all three; only the launcher's name and the activation line diffe
 ./setup.sh --local --skip-data            # clone and build the environment only
 ```
 
-On Windows substitute `.\setup.cmd` for `./setup.sh`; the options are the same.
-
 Re-running is safe — each step skips what is already done.
 
 ### If something goes wrong
@@ -67,11 +65,15 @@ python scripts/check-datasets.py --release r1        # is every dataset reachabl
 can run alone — `nids-setup.py clone`, `env`, `data` — which is the quickest way to redo just
 the part that failed.
 
-**Python 3.11 or newer** is needed to read the registry, and **git** must be on your PATH.
-Building the environment additionally needs an interpreter with `venv` support — some system
-Python builds ship without it, and `--python` is how you point at one that has it. On Windows,
-install Python from [python.org](https://www.python.org/downloads/windows/) and tick *Add
-python.exe to PATH*; `setup.cmd` finds it through the `py` launcher or `python`.
+**Prerequisites**
+
+- **Python 3.11 or newer**, to read the registry.
+- **git** on your PATH.
+- An interpreter with **`venv` support**, to build the environment — some system Python builds
+  ship without it, and `--python` is how you point at one that has it.
+
+Installing Python on Windows: get it from [python.org](https://www.python.org/downloads/windows/)
+and tick *Add python.exe to PATH*. `setup.cmd` finds it through the `py` launcher or `python`.
 
 ## Which modules this covers
 
@@ -111,8 +113,9 @@ pre-built `nids-hub` image with one spawner profile per assignment.
 
 ## The steps
 
-The guides in [docs/](docs/) are numbered in reading order. Which ones you need depends on the
-choice above:
+The guides in [docs/](docs/) are numbered in reading order. They cover **deploying and operating
+your own hub** — setting up a module to work on needs none of them; that is the
+[quickstart](#quickstart) above. Which ones you need depends on the choice above:
 
 | Step                                                   | Community hub                | Your own hub |
 | ------------------------------------------------------ | ---------------------------- | ------------ |

@@ -133,7 +133,7 @@ now added but its database not yet deployed.
 
 | Assignment | Profile | Image deps | Notes |
 |---|---|---|---|
-| `nids-bgp-control-plane` | ✅ | ✅ **[verified]** | Its notebook has since landed: `%pip install pybgpkit-parser pelicanfs pytricia pandas` plus `matplotlib`, all already in `requirements.txt`. The earlier inference from `Datasets.md` was right. **`pytricia` was replaced by `py-radix` on 2026-09-04 [verified]** — see "Why py-radix, not pytricia" below. |
+| `nids-bgp-control-plane` | ✅ | ✅ **[verified]** | Its notebook has since landed: `%pip install pybgpkit-parser pelicanfs py-radix pandas` plus `matplotlib`, all already in `requirements.txt` **[verified 2026-09-08 against the committed notebook]**. The earlier inference from `Datasets.md` was right. **`pytricia` was replaced by `py-radix` on 2026-09-04 [verified]** — see "Why py-radix, not pytricia" below. |
 | `nids-telescope-traffic` | ✅ | ✅ **[verified]** | Pins its own `requirements.txt`. Highest memory profile. |
 | `nids-dns-ecosystem` | ✅ | ✅ **[verified]** | Only assignment using Spark. |
 | `nids-iyp` | ❌ not yet | ✅ `neo4j`, `python-dotenv` added | **Blocked on a Neo4j instance** — see below. `nids-iyp.ipynb` does not exist yet, so deps come from its `requirements.txt`/`pyproject.toml`, not real imports. |
@@ -340,7 +340,7 @@ when a dependency is *added* rather than by a tester on an unrepresented platfor
 
 | Priority | Question |
 |---|---|
-| High | **The image builds, but has never been pushed or pulled.** **[verified]** `docker buildx build --platform linux/amd64` succeeds and the import set (`pyspark, dpkt, pytricia, pybgpkit_parser, pelicanfs, neo4j`) loads; the base index digest correctly selects amd64 on an arm64 host. Untested: the push, the cluster pull, and a real Spark session. Failure modes are tabulated in [docs/0_build_images.md](docs/0_build_images.md#if-the-build-fails). |
+| High | **The image builds, but has never been pushed or pulled.** **[verified]** `docker buildx build --platform linux/amd64` succeeds and the import set (`pyspark, dpkt, pytricia, pybgpkit_parser, pelicanfs, neo4j`) loads — that was the 09-03 image, before `pytricia` gave way to `py-radix`, so a rebuild is what makes this claim current again; the base index digest correctly selects amd64 on an arm64 host. Untested: the push, the cluster pull, and a real Spark session. Failure modes are tabulated in [docs/0_build_images.md](docs/0_build_images.md#if-the-build-fails). |
 | High | Deploy the IYP Neo4j instance and settle the credential model, including the Community Edition RBAC gap above. The pod manifest survives and is reconstructed in [datasets/iyp-neo4j](datasets/iyp-neo4j/); the dump source and the `iyp-storage` PVC definition do not. |
 | High | **Recover how the six Ceph-hosted datasets are provisioned.** **[verified]** as undocumented. Until then the hub's data cannot be rebuilt from scratch by anyone but whoever originally staged it, and the four dated objects cannot be refreshed. Per-dataset gaps are recorded under [datasets/](datasets/README.md). |
 | Medium | **Is CAIDA's Ceph mirror licensed to re-serve MaxMind GeoLite2?** **[unverified]** The assignment needs no MaxMind account because of the mirror, which relocates the licence question rather than answering it. Same shape for the anonymized telescope PCAPs under the UCSD-NT AUA/DUA. |
