@@ -116,6 +116,10 @@ The datasets split between the in-cluster object store and the public internet, 
 | Source | Used by | Reachability |
 |---|---|---|
 | `rook-ceph-rgw-nautiluss3.rook` (NRP Ceph RGW) | ASN, BGP, IRR, TELESCOPE | **In-cluster only** — resolvable from pods inside NRP. |
+| `publicdata.caida.org` (CAIDA as2org) | ASN, BGP | External egress. **[unverified]** — newly
+required: `nids-setup.py data` stages as2org from the pinned public release in **both** modes,
+because the in-cluster object is undated and would otherwise make the hub and a laptop
+disagree on the country figures. Confirm with `notebooks/check-datasets.ipynb` on the hub. |
 | `osdf-director.osg-htc.org` (OSDF / RouteViews) | BGP, TELESCOPE | External egress. |
 | `ftp.ripe.net` (RIPE RPKI ROAs) | IRR | External egress — the only assignment reaching this host. |
 | `object.openintel.nl` (OpenINTEL S3A) | DNS | External egress. |

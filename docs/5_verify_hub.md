@@ -176,8 +176,9 @@ git clone https://github.com/CAIDA/nids-dns-ecosystem-key.git
 | `nids-dns-ecosystem-key` | DNS (Spark) | Starts Spark with the assignment's exact S3A config, reads one OpenINTEL partition's Parquet **schema**, HEADs `manycast.net`, resolves a hostname via `dnspython`. | 2–5 min |
 | `nids-telescope-traffic-key` | Telescope (24 GB) | **Fails if memory < 16 GiB**, then the two Ceph PCAPs, the GeoLite2 database, and an OSDF RIB listing. | seconds |
 
-A green run there is the signal the assignment is ready to hand out. A red one is a real answer to
-one of the open egress questions in [DESIGN.md](../DESIGN.md) — worth recording there.
+A green run there is the signal the assignment is ready to hand out. A red one tells you which
+host your namespace cannot reach — compare it against the egress table in
+[Deploy JupyterHub](4_nrp_jupyterhub.md#data-access-and-egress).
 
 ## Troubleshooting
 
@@ -199,7 +200,6 @@ one of the open egress questions in [DESIGN.md](../DESIGN.md) — worth recordin
 
 - [Deploy JupyterHub](4_nrp_jupyterhub.md) — the deployment this verifies
 - [Build the images](0_build_images.md) — image build and its failure modes
-- [DESIGN.md](../DESIGN.md) — why the image, profiles, and data paths are what they are
 
 ---
 
