@@ -16,6 +16,17 @@
 #
 # A repo may override its own block with a `nids.toml` at its root; see docs.
 # Loader: scripts/nids_registry.py
+#
+# `venue` -- where a module is supported, decided 2026-09-09 (D15). Every module runs on
+# the NRP hub; that is the universal path and the default, so a block that says nothing
+# is NRP-only. A module earns "local" by meeting two conditions and only those two: its
+# environment builds from wheels with no host prerequisite the tooling cannot install,
+# and every dataset it reads is publicly downloadable. `validate()` enforces the second
+# half, so a module cannot claim local and quietly depend on Ceph or a credential.
+#
+# Local is an admission, not a tier with a fixed membership -- a module joins the day it
+# meets the criteria, and UCSDNT ("expanse") will never meet them because its venue is a
+# different machine, not a smaller one.
 
 schema = 1
 
@@ -25,6 +36,7 @@ name = "ASN Introduction"
 repo = "nids-asn-introduction"
 key_repo = "nids-asn-introduction-key"
 release = "r1"        # issue #1 -- both datasets on publicdata.caida.org; the only pure-publicdata module
+venue = ["local", "nrp"]    # verified end to end on a laptop 2026-09-03, 22 cells, no errors
 status = "active"
 check = "00-environment-check.ipynb"   # [verified 2026-09-04] named by Brad's
                             # convention, but no such file exists in nids-asn-introduction-key on any
@@ -49,6 +61,7 @@ name = "BGP Control Plane"
 repo = "nids-bgp-control-plane"
 key_repo = "nids-bgp-control-plane-key"
 release = "r1"        # issue #2 -- publicdata x2 plus RouteViews via OSDF
+venue = ["local", "nrp"]    # verified end to end on a laptop 2026-09-03, 30 cells, no errors
 status = "active"
 check = "00-environment-check.ipynb"   # [verified 2026-09-04] named by Brad's
                             # convention, but no such file exists in nids-bgp-control-plane-key on any
@@ -83,6 +96,8 @@ key_repo = "nids-irr-rpki-whois-key"
 variants = ["nids-irr-rpki-whois-local"]
 release = "later"     # issue #3 -- DROPPED from v1 on reproducibility, not access: it pins 2023
                             # snapshots and no IRR archives its dumps. See nids-irr-rpki-whois-local
+venue = ["nrp"]             # the pinned 2023 snapshot is re-fetchable from nowhere, so the
+                            # hub copy is the only stable one
 status = "active"
 check = "00-environment-check.ipynb"
 
@@ -115,6 +130,7 @@ name = "ITDK"
 repo = "nids-itdk"
 key_repo = "nids-itdk-key"
 release = "later"     # issue #4 -- reads a built Postgres database that is unpublished and absent
+venue = ["nrp"]             # the database is an in-namespace deployment by construction
 status = "blocked"          # no Postgres instance exists anywhere yet
 blocked_on = "an in-namespace Postgres deployment"
 check = "00-environment-check.ipynb"
@@ -137,6 +153,10 @@ name = "DNS Ecosystem"
 repo = "nids-dns-ecosystem"
 key_repo = "nids-dns-ecosystem-key"
 release = "r1"        # issue #5 -- anonymous OpenINTEL S3 and a plain HTTPS parquet
+venue = ["nrp"]             # its data is public, but Spark wants a JDK 17+ (plus winutils.exe
+                            # and HADOOP_HOME on Windows) and `env` cannot install any of it.
+                            # A laptop with a JDK already on it will very likely work -- that
+                            # is best-effort, not a supported path, and it has never been run
 status = "active"
 check = "00-environment-check.ipynb"
 profile = true
@@ -165,6 +185,7 @@ name = "Network Telescope Traffic"
 repo = "nids-telescope-traffic"
 key_repo = "nids-telescope-traffic-key"
 release = "later"     # issue #6 -- pcap samples unpublished; MaxMind account-gated and geo-restricted
+venue = ["nrp"]             # both blockers are data-publication questions, not compute ones
 status = "active"
 check = "00-environment-check.ipynb"
 profile = true
@@ -195,8 +216,12 @@ period = "2026.06"          # one month ahead of BGP's pin -- the drift, made vi
 name = "Internet Yellow Pages"
 repo = "nids-iyp"
 key_repo = "nids-iyp-key"
-release = "r1"        # issue #8 -- public Neo4j endpoint, no credentials. Ships with no
-                            # environment check; `verify` reports that rather than failing
+release = "later"     # issue #8 -- DEMOTED from r1 2026-09-09: the public bolt endpoint
+                            # iyp-bolt.ihr.live is down from everywhere, so no venue rescues it.
+                            # Returns to r1 when IHR restores it, or if a Neo4j is stood up in
+                            # the namespace. Ships with no environment check; `verify` reports
+                            # that rather than failing
+venue = ["nrp"]
 status = "blocked"          # student path works against the public instance; the
 blocked_on = "a self-hosted Neo4j instance for the instructor path"
 check = ""                  # [verified] no 00-environment-check.ipynb exists -- a real gap
@@ -215,6 +240,7 @@ name = "UCSD Network Telescope (Expanse)"
 repo = "nids-ucsdnt-expanse"
 key_repo = "nids-ucsdnt-expanse-key"
 release = "later"     # issue #7 -- credentialed bucket plus an SDSC Expanse allocation
+venue = ["expanse"]         # a different machine, not a smaller one: Slurm, not JupyterHub
 status = "offsite"          # runs on SDSC Expanse under Slurm, not on the NRP hub, so it
                             # needs no spawner profile at all [verified]
 check = ""                  # expected: the check would have to run under Slurm

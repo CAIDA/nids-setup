@@ -875,6 +875,20 @@ def cmd_setup(args):
         # shadow it and confuse the kernel the notebook actually runs in.
         skip_env, env_note = True, "skipped on NRP -- the hub image already provides the packages"
 
+    if args.mode == "local":
+        # D15 (2026-09-09): NRP is the supported venue for every module; `local` is an
+        # admission a module earns in the registry. Warn rather than refuse -- several
+        # hub-bound modules do run on a laptop that happens to have the right host
+        # prerequisite, and we would rather someone try it than be stopped by a claim.
+        offhub = [code for code, a in nids_registry.load_assignments(release=args.release).items()
+                  if not a.runs_local and (not modules or code in modules)]
+        if offhub:
+            print(f"note: {', '.join(offhub)} {'is' if len(offhub) == 1 else 'are'} supported "
+                  f"on the NRP hub, not on a laptop.\n"
+                  f"      Setup will still run and may well work, but it is untested and "
+                  f"unsupported;\n"
+                  f"      see the module's README for what its venue needs.\n")
+
     where = f"{args.mode}, release {args.release}"
     if modules:
         where += f", modules {','.join(modules)}"
@@ -930,6 +944,273 @@ def cmd_setup(args):
     return 0
 
 
+# --- prep --------------------------------------------------------------------------
+# Phase 5, the instructor path. `verify` answers "does this run?"; `prep` answers the
+# question an instructor actually asks -- "can I hand this out on Monday, and what do I
+# have to do first?" It is deliberately a report rather than an action: nothing here
+# writes to a repo, because an instructor's first run of an unfamiliar tool should not
+# change anything.
+#
+# Explicitly out of scope (PLAN.md Phase 5): generating student repos from key repos,
+# which is nids-module-creator's job, and anything touching GitHub Classroom.
+
+# Paths that are noise in a key-vs-student comparison: build droppings, the staged data
+# the tooling puts there, and the checkpoints Jupyter writes beside every notebook.
+_INVENTORY_SKIP = (".git", ".ipynb_checkpoints", "__pycache__", "data", ".venv")
+
+
+def repo_inventory(path):
+    """Relative paths of the content files in a module checkout.
+
+    `git ls-files` when the checkout is a repo, so a gitignored artifact never reads as a
+    difference between the two repos; a filesystem walk otherwise, because a downloaded
+    zip is a perfectly reasonable way to have a module.
+    """
+    if (path / ".git").exists() and shutil.which("git"):
+        done = subprocess.run(["git", "-C", str(path), "ls-files"],
+                              capture_output=True, text=True, encoding="utf-8",
+                              errors="replace")
+        if done.returncode == 0:
+            return {line for line in done.stdout.splitlines() if line
+                    and not line.startswith(_INVENTORY_SKIP)}
+    found = set()
+    for entry in path.rglob("*"):
+        if entry.is_dir():
+            continue
+        rel = entry.relative_to(path)
+        if any(part in _INVENTORY_SKIP for part in rel.parts):
+            continue
+        found.add(rel.as_posix())
+    return found
+
+
+def _notebook_stem(name):
+    """`nids-asn-introduction-key.ipynb` -> `nids-asn-introduction`, so the two repos'
+    notebooks can be matched across the naming convention rather than by filename."""
+    stem = pathlib.PurePosixPath(name).stem
+    return stem[:-4] if stem.endswith("-key") else stem
+
+
+def prep_inventory(code, assignment, root):
+    """(b) Does every notebook the students get have an answer in the key?
+
+    The spec asked for a file-level diff of the two repos, and the first implementation
+    did exactly that -- which turned out to be useless here. A key repo holds a README and
+    one notebook; the student repo holds all the prose, images and slides. So *every*
+    student file is "missing from the key", every time, and a report that fires on all of
+    them teaches the reader to skip this section.
+
+    What is actually diagnostic is narrower: a notebook handed to students with no
+    counterpart in the key means an instructor is about to assign work they have no answer
+    for. That is the failure. The rest of the file difference is printed as a count, for
+    orientation only.
+    """
+    lines, problems = [], 0
+    key_path = root / assignment.key_repo if assignment.key_repo else None
+    student_path = root / assignment.repo if assignment.repo else None
+    if not (key_path and key_path.is_dir()):
+        return [f"[warn] {assignment.key_repo or 'no key repo'} is not cloned -- "
+                f"nothing to compare"], 0
+    if not (student_path and student_path.is_dir()):
+        return [f"[warn] {assignment.repo or 'no student repo'} is not cloned -- "
+                f"clone it to compare against the key"], 0
+
+    key_files, student_files = repo_inventory(key_path), repo_inventory(student_path)
+    key_stems = {_notebook_stem(f) for f in key_files if f.endswith(".ipynb")}
+    unanswered = sorted(f for f in student_files
+                        if f.endswith(".ipynb") and _notebook_stem(f) not in key_stems)
+    if unanswered:
+        problems += 1
+        lines.append(f"[FAIL] {len(unanswered)} student notebook(s) with no answer key:")
+        lines.extend(f"         {name}" for name in unanswered)
+    else:
+        answered = sum(1 for f in student_files if f.endswith(".ipynb"))
+        lines.append(f"[ ok ] every student notebook has a key ({answered} notebook"
+                     + ("s" if answered != 1 else "") + ")")
+
+    # Orientation only. A key repo is a companion, not a copy, so these counts are
+    # expected to be lopsided -- they are here to make an *empty* student repo or a key
+    # that has quietly accumulated material visible, not to be zero.
+    only_key = sorted(key_files - student_files)
+    only_student = sorted(student_files - key_files)
+    lines.append(f"[ ok ] {len(only_student)} file(s) only in the student repo, "
+                 f"{len(only_key)} only in the key")
+    extras = [f for f in only_key if not f.endswith(".ipynb") and f not in {".gitignore", "README.md"}]
+    if extras:
+        lines.append("       instructor-only material: " + ", ".join(extras[:6])
+                     + (" ..." if len(extras) > 6 else ""))
+    return lines, problems
+
+
+def checker_python(args=None):
+    """The interpreter to run check-datasets.py in: the built environment when there is one.
+
+    `sys.executable` is whatever launched this CLI, which on a laptop is the system Python
+    and does not have `pelicanfs` -- so the OSDF probe reported "skipped: pip install
+    pelicanfs" while the package sat installed in .venv two directories away. A skipped
+    check is not a passing check, and this one was skipping for a reason that had nothing
+    to do with the dataset.
+    """
+    if args is not None and getattr(args, "python", None):
+        found = shutil.which(args.python) or args.python
+        return str(pathlib.Path(found).resolve())
+    venv = pathlib.Path(args.path).expanduser().resolve() \
+        if args is not None and getattr(args, "path", None) \
+        else nids_registry.repo_root() / ".venv"
+    return str(venv_python(venv) or sys.executable)
+
+
+def prep_datasets(code, args=None):
+    """(c) Are this module's pinned coordinates still reachable?
+
+    A subprocess for the same reason `doctor` uses one: check-datasets.py owns the
+    exit-code contract, and a second implementation of it here is exactly the drift this
+    tooling exists to remove. Pin freshness is not hypothetical -- BGP pins a RouteViews
+    month and ASN a customer-cone serial, and a release that ships a stale pin fails on
+    the instructor's first run rather than ours.
+    """
+    checker = nids_registry.repo_root() / "scripts" / "check-datasets.py"
+    done = subprocess.run([checker_python(args), str(checker), "--assignment", code],
+                          capture_output=True, text=True, encoding="utf-8",
+                          errors="replace")
+    lines = [line for line in done.stdout.splitlines() if line.strip()]
+    return lines, (1 if done.returncode else 0)
+
+
+def prep_venue(assignment):
+    """(d) Where this module is supported, and what the instructor needs to teach it.
+
+    Venue comes first because after D15 it is the fact that decides everything else: an
+    instructor reading this needs to know whether to send students to a laptop or to
+    arrange namespace access before term starts.
+    """
+    lines = []
+    venue = ", ".join(assignment.venue)
+    if assignment.runs_local:
+        lines.append(f"[ ok ] venue: {venue} -- students can run this on their own machines")
+    else:
+        lines.append(f"[ ok ] venue: {venue} -- students need access to that venue; the "
+                     f"laptop path is untested and unsupported")
+    memory = assignment.memory or {}
+    if memory:
+        envelope = f"{memory.get('guarantee', '?')} guaranteed, {memory.get('limit', '?')} limit"
+        measured = "" if memory.get("verified") else "  (from the registry; not measured)"
+        lines.append(f"[ ok ] memory profile: {envelope}{measured}")
+        if assignment.raw.get("profile"):
+            lines.append("       needs its own spawner profile on the hub -- see "
+                         "docs/4_nrp_jupyterhub.md")
+    else:
+        lines.append("[ ok ] memory profile: none in the registry -- the hub default applies")
+    if assignment.status != "active":
+        blocked = assignment.raw.get("blocked_on")
+        lines.append(f"[warn] module status is {assignment.status!r}"
+                     + (f" -- blocked on {blocked}" if blocked else ""))
+    if assignment.release != "r1":
+        lines.append(f"[warn] release is {assignment.release!r}, not r1 -- this module is "
+                     f"not part of the shipping release")
+    return lines
+
+
+def cmd_prep(args):
+    """Report what an instructor must do before handing a module out.
+
+    Four checks per module, in the order an instructor needs them: where it runs, whether
+    its data is still where the registry says, whether the key and student repos agree,
+    and whether the key notebook actually runs. The last is by far the slowest, which is
+    why --skip-verify exists and why it is the last thing printed.
+    """
+    root = find_root(getattr(args, "root", None))
+    assignments, codes = select(args)
+    selected = {code: a for code, a in assignments.items()
+                if not codes or code in codes}
+    if not selected:
+        raise SystemExit("no modules matched")
+
+    print(f"root:    {root}")
+    print(f"modules: {', '.join(selected)}\n")
+
+    summary = []
+    for code, assignment in selected.items():
+        print("=" * 62)
+        print(f" {code} -- {assignment.name}")
+        print("=" * 62)
+        problems, unchecked = 0, 0
+
+        def report(lines):
+            """Print a check's lines and count the ones that mean "not actually checked".
+
+            A [warn] here is never a pass. Two release-1 datasets read as fine for weeks
+            because the packages that would have tested them were absent, and a `prep`
+            that prints "ready to hand out" over an uncloned key repo would repeat that
+            mistake in the one command an instructor trusts.
+            """
+            skipped = 0
+            for line in lines:
+                print(f"  {printable(line)}")
+                if line.startswith("[warn]"):
+                    skipped += 1
+            return skipped
+
+        print("\n1/4  where it runs")
+        unchecked += report(prep_venue(assignment))
+
+        print("\n2/4  pinned datasets")
+        if args.skip_datasets:
+            print("  [skip] --skip-datasets")
+            unchecked += 1
+        else:
+            lines, bad = prep_datasets(code, args)
+            problems += bad
+            unchecked += report(lines)
+
+        print("\n3/4  key repo against student repo")
+        lines, bad = prep_inventory(code, assignment, root)
+        problems += bad
+        unchecked += report(lines)
+
+        print("\n4/4  the key notebook")
+        if args.skip_verify:
+            print("  [skip] --skip-verify")
+            unchecked += 1
+        else:
+            verify_args = argparse.Namespace(
+                root=getattr(args, "root", None), release=args.release,
+                assignment=[code], path=args.path, python=args.python,
+                timeout=args.timeout, dry_run=args.dry_run)
+            # cmd_verify prints its own report; its return code is the ready/not-ready
+            # answer for this one module.
+            problems += 1 if cmd_verify(verify_args) else 0
+
+        summary.append((code, problems, unchecked))
+        print()
+
+    print("-" * 62)
+    for code, problems, unchecked in summary:
+        if problems:
+            tag, detail = "[FAIL]", f"{problems} check(s) need attention -- see above"
+        elif unchecked:
+            tag = "[warn]"
+            detail = (f"nothing failed, but {unchecked} check(s) did not run -- "
+                      f"not confirmed ready")
+        else:
+            tag, detail = "[ ok ]", "ready to hand out"
+        print(f"{tag} {code:11} {detail}")
+
+    blocked = [c for c, problems, _ in summary if problems]
+    partial = [c for c, problems, unchecked in summary if not problems and unchecked]
+    ready = [c for c, problems, unchecked in summary if not problems and not unchecked]
+    print()
+    if blocked:
+        print(f"NOT ready: {', '.join(blocked)}")
+    if partial:
+        print(f"not confirmed (checks skipped or unavailable): {', '.join(partial)}")
+    if ready:
+        print(f"ready to hand out: {', '.join(ready)}")
+    elif not blocked:
+        print("nothing was confirmed ready -- every module had a check that did not run")
+    return 1 if blocked else 0
+
+
 def cmd_doctor(args):
     """discover, then hand the reachability question to the dedicated checker.
 
@@ -942,7 +1223,7 @@ def cmd_doctor(args):
     codes = args.assignment or [None]
     for code in codes:
         print()
-        cmd = [sys.executable, str(checker)] + (["--assignment", code] if code else [])
+        cmd = [checker_python(args), str(checker)] + (["--assignment", code] if code else [])
         status |= subprocess.run(cmd).returncode
     return status
 
@@ -960,6 +1241,7 @@ def main(argv=None):
         ("env", cmd_env, "build one environment that runs the selected modules"),
         ("data", cmd_data, "stage each module's datasets into its own data/ directory"),
         ("verify", cmd_verify, "run each key repo's notebook and report what is ready to hand out"),
+        ("prep", cmd_prep, "the instructor path -- what to do before handing a module out"),
     ):
         p = sub.add_parser(name, help=help_text)
         # Also accepted after the subcommand, so `setup.sh --root DIR` works -- the
@@ -1003,7 +1285,7 @@ def main(argv=None):
                            help="parallel clones (default: 4)")
             p.add_argument("--dry-run", action="store_true",
                            help="print what would happen, change nothing")
-        if name == "verify":
+        if name in ("verify", "prep"):
             p.add_argument("--path", metavar="DIR",
                            help="the environment to run in (default: <nids-setup>/.venv)")
             p.add_argument("--python", metavar="EXE",
@@ -1012,6 +1294,12 @@ def main(argv=None):
                            help="per-notebook time limit (default: 900)")
             p.add_argument("--dry-run", action="store_true",
                            help="print which notebook each module would run, run nothing")
+        if name == "prep":
+            p.add_argument("--skip-verify", action="store_true",
+                           help="do not run the key notebook (much faster; the other "
+                                "three checks still run)")
+            p.add_argument("--skip-datasets", action="store_true",
+                           help="do not probe the pinned dataset coordinates")
         if name == "data":
             p.add_argument("--nrp", action="store_true",
                            help="fetch from the in-cluster mirror instead of the open web")

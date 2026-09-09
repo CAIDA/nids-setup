@@ -187,6 +187,10 @@ class Assignment:
         # that is not derivable from the dataset fields. Unmarked means not in v1 --
         # a new module has to opt in, never land in the release by omission.
         self.release = data.get("release", "later")
+        # Where the module is supported (D15, 2026-09-09). Every module runs on the NRP
+        # hub, so that is the default and a block that says nothing is hub-only; "local"
+        # is an admission a module earns and `_venue_problems` enforces half of.
+        self.venue = data.get("venue", ["nrp"])
         self.check_notebook = data.get("check")
         # Optional commit pin, honoured by clone-nids-repos.sh. Unset means track the
         # module's default branch.
@@ -194,6 +198,11 @@ class Assignment:
         self.memory = data.get("memory", {})
         self.environment = data.get("environment", {})
         self.datasets = data.get("datasets", [])
+
+    @property
+    def runs_local(self):
+        """True if the module claims the local venue. See `venue` in registry.toml."""
+        return "local" in self.venue
 
     def env_for(self, role):
         """Merged environment spec for `assignment` or `key`.
@@ -381,21 +390,27 @@ def validate(root=None):
             except KeyError as exc:
                 problems.append(f"{assignment.code}/{exc.args[0]}")
 
-    problems.extend(_release_problems(datasets, assignments))
+    problems.extend(_venue_problems(datasets, assignments))
     return problems
 
 
-def _release_problems(datasets, assignments):
-    """The v1 scope guard: nothing non-public may ship in the release.
+def _venue_problems(datasets, assignments):
+    """The local-venue guard: a module claiming `local` must read only public data.
+
+    Rekeyed from release to venue 2026-09-09 (D15). The old guard asked "is this in
+    release 1?", which was the right question while release 1 *was* the laptop scope.
+    It no longer is -- a hub-bound module may ship in a release and legitimately read
+    an in-cluster or credentialed dataset. What cannot happen is a module advertising
+    the laptop path while depending on something a laptop cannot reach.
 
     Both clauses earn their place. `public_access` catches maxmind-geolite2 and
     ucsd-nt-pcap-samples, which declare no credentials and are still closed; the
     credentials list catches itdk-postgres and ucsdnt-expanse-flowtuple. Either alone
-    lets a restricted dataset back into the release through a later edit.
+    lets a restricted dataset back in through a later edit.
     """
     problems = []
     for assignment in assignments.values():
-        if assignment.release != "r1":
+        if not assignment.runs_local:
             continue
         for entry in assignment.datasets:
             dataset = datasets.get(entry["id"])
@@ -403,14 +418,14 @@ def _release_problems(datasets, assignments):
                 continue                      # already reported above
             if not dataset.public_access:
                 problems.append(
-                    f"{assignment.code} is release r1 but reads {dataset.id}, which is not "
-                    f"publicly accessible -- drop the module from r1 or give the dataset a "
-                    f"public coordinate"
+                    f"{assignment.code} claims venue 'local' but reads {dataset.id}, which is "
+                    f"not publicly accessible -- drop 'local' from its venue or give the "
+                    f"dataset a public coordinate"
                 )
             if dataset.credentials:
                 problems.append(
-                    f"{assignment.code} is release r1 but reads {dataset.id}, which requires "
-                    f"{', '.join(dataset.credentials)}"
+                    f"{assignment.code} claims venue 'local' but reads {dataset.id}, which "
+                    f"requires {', '.join(dataset.credentials)}"
                 )
     return problems
 

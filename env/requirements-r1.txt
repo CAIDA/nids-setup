@@ -4,11 +4,11 @@
 #   ASN          (base only)
 #   BGP          pybgpkit-parser, pelicanfs, py-radix, pandas, matplotlib
 #   DNS          pyspark, tldextract, dnspython, matplotlib, numpy, requests
-#   IYP          neo4j, pandas, python-dotenv
 
 # --- base ---
 jupyterlab
 ipykernel
+nbclient
 tomli; python_version < "3.11"
 
 # --- modules ---
@@ -22,5 +22,3 @@ tldextract
 dnspython
 numpy
 requests
-neo4j
-python-dotenv
