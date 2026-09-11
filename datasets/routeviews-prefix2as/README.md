@@ -51,8 +51,8 @@ match closely.
 Known:
 
 - **Upstream source:** `https://publicdata.caida.org/datasets/routing/routeviews-prefix2as/`, which
-  publishes `<YYYY>/<MM>/routeviews-rv2-<YYYYMMDD>-<HHMM>.pfx2as.gz`. **[unverified]** as the actual
-  mirror source, though the path structure matches.
+  publishes `<YYYY>/<MM>/routeviews-rv2-<YYYYMMDD>-<HHMM>.pfx2as.gz`. **Not established:** that
+  this is the actual mirror source, though the path structure matches.
 - **Target path:** `caida/routing/routeviews-prefix2as/<YYYY>/<MM>/routeviews-rv2-<YYYYMMDD>-1200.pfx2as.gz`.
 - **Artifact shape:** copied verbatim; the directory layout and filename convention are upstream's.
 

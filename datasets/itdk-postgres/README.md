@@ -143,8 +143,9 @@ The loader reads four bz2 files from `ITDK_DATA_DIR`. It accepts either a direct
 them, or a release archive root — in which case it auto-selects the most recent `ITDK-YYYY-MM/`
 subdirectory that contains all of them (`ITDK-YYYY-MM` sorts correctly as a plain string).
 
-CAIDA's shared archive path `/data/topology/ITDK` is the default source. **[unverified]** whether
-that path is reachable from the machine running the build, or how to obtain the release otherwise.
+CAIDA's shared archive path `/data/topology/ITDK` is the default source. **Not established:**
+whether that path is reachable from the machine running the build, or how to obtain the release
+otherwise.
 
 The build verifies the geolocation file's md5 before touching any table, so a truncated download
 fails fast rather than half-loading.
@@ -167,8 +168,8 @@ one cell.
 Create a read-only Postgres role and distribute its DSN as `ITDK_READ_DSN` in a `db_credentials.env`
 placed beside the student notebook. Postgres has real role-based access control, so unlike
 [iyp-neo4j](../iyp-neo4j/) this credential is genuinely read-only and the restriction is enforced by
-the database rather than by convention. **[unverified]** — the exact `GRANT` statements are not
-recorded in any repo and should be written down when next run.
+the database rather than by convention. **Not established:** the exact `GRANT` statements, which
+are recorded in no repo and should be written down when this is next run.
 
 ### Refreshing to a newer release
 

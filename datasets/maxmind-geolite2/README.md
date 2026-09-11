@@ -11,8 +11,9 @@ attach a country and city to telescope source addresses.
 - **Setup:** ❌ required, procedure not documented — see below
 - **Credentials:** none, **because** of the mirror
 - **Time-sensitive:** Yes — the filename encodes a `YYYY-MM-DD` build date
-- **Licence / governance:** upstream is licence-gated (MaxMind GeoLite2 EULA). Whether the mirror is
-  licensed to re-serve it is an open question. **[unverified]**
+- **Licence / governance:** upstream is licence-gated (MaxMind GeoLite2 EULA). **Not established:**
+  whether the mirror is licensed to re-serve it. Obtain GeoLite2 under your own MaxMind account if
+  you deploy a hub.
 
 ## Access
 
@@ -54,8 +55,8 @@ Known:
   require a MaxMind account and a licence key, and are served as a dated tarball containing the MMDB.
 - **Target path:** `caida/geolocation/maxmind/<YYYY-MM-DD>.GeoLite2-City.mmdb.gz`.
 - **Artifact shape:** the `.mmdb` extracted from MaxMind's tarball, re-gzipped on its own and renamed
-  with the build date as a filename prefix. So there **is** a transformation here, not a verbatim copy.
-  **[unverified]** in detail.
+  with the build date as a filename prefix. So there **is** a transformation here, not a verbatim
+  copy. **Not established:** what it does in detail.
 
 Must be recovered:
 

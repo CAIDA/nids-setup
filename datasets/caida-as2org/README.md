@@ -56,14 +56,14 @@ Known:
 
 - **Upstream source:** CAIDA's as2org dataset, available as a paginated API at
   `https://api.data.caida.org/as2org/v1/orgs/` and as periodic bulk files from
-  `https://publicdata.caida.org/datasets/as-organizations/`. **[unverified]** which of the two the
-  Ceph object was built from.
+  `https://publicdata.caida.org/datasets/as-organizations/`. **Not established:** which of the two
+  the Ceph object was built from.
 - **Target path:** `caida/as2org/as2org.jsonl` in the Ceph `caida` bucket.
 - **Artifact shape:** JSON Lines, one organisation record per line.
 - **Partial lead:** `nids-overview/datasets.md` refers to pagination being "handled by provided
   `org-download.py`", and an `orgs-download.py` exists under
-  `nids-asn-introduction-key/temp/scripts/`. Whether either produced this exact file is
-  **[unverified]** — check them before writing a procedure.
+  `nids-asn-introduction-key/temp/scripts/`. **Not established:** whether either produced this
+  exact file — check them before writing a procedure.
 
 Must be recovered:
 

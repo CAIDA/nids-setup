@@ -85,9 +85,9 @@ at the release scope wrong.
   upstream is on `publicdata.caida.org`, even while NIDS reads an in-cluster mirror.
 - **`public_access`** — can anyone download **the artifact this dataset resolves to**,
   from the open web, with no account, allocation, or vetting? Getting onto NRP or SDSC
-  Expanse is a vetting process and does not count. **This is the release-1 test**, and
-  `nids_registry.validate()` refuses to let an `r1` module read a dataset where it is
-  false. It defaults to `public` when unset, so a new dataset is never silently admitted
+  Expanse is a vetting process and does not count. **This is the local-venue test**, and
+  `nids_registry.validate()` refuses to let a module claiming `venue = ["local", ...]` read
+  a dataset where it is false. It defaults to `public` when unset, so a new dataset is never silently admitted
   on a field nobody set.
 - **`[access.public]`** — the coordinate that makes `public_access` true when `[access]`
   points somewhere not everyone can reach. When present it is what `resolve()`, `url()`,
@@ -172,10 +172,13 @@ SDSC Expanse under Slurm).
 
 `release` is `r1` | `later`, and it is **editorial** — it records a decision about which
 modules ship first, which is not derivable from the dataset fields. It defaults to
-`later`: a module opts into the release, and can never land in it by omission. The
-release scopes *modules*; the datasets in scope follow from what those modules pin, which
-is why `routeviews-prefix2as` is out of v1 despite being publicly downloadable — its only
-reader is IRR.
+`later`: a module opts into the release, and can never land in it by omission. `r1` is ASN
+and BGP, the two modules a student can run unaided. The release scopes *modules*; the
+datasets in scope follow from what those modules pin, which is why `routeviews-prefix2as`
+is out of r1 despite being publicly downloadable — its only reader is IRR.
+
+`release` and `venue` are independent. They happen to select the same two modules today;
+do not derive one from the other.
 
 ## What belongs in a comment here
 

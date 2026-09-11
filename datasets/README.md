@@ -25,16 +25,23 @@ Codes are the ones published in
 [assignments.json](https://www.caida.org/projects/nids/assignments/assignments.json), behind the
 [NIDS assignments page](https://www.caida.org/projects/nids/assignments/).
 
-| code | name |
-|---|---|
-| ASN | ASN Introduction |
-| BGP | BGP Control Plane |
-| IRR | Registries: WHOIS, IRR & RPKI |
-| ITDK | ITDK |
-| DNS | DNS Ecosystem |
-| TELESCOPE | Network Telescope Traffic |
-| IYP | Internet Yellow Pages |
-| UCSDNT | UCSD Network Telescope (Expanse) |
+| code | name | runs on |
+|---|---|---|
+| ASN | ASN Introduction | Laptop or NRP |
+| BGP | BGP Control Plane | Laptop or NRP |
+| IRR | Registries: WHOIS, IRR & RPKI | NRP |
+| ITDK | ITDK | NRP |
+| DNS | DNS Ecosystem | NRP |
+| TELESCOPE | Network Telescope Traffic | NRP |
+| IYP | Internet Yellow Pages | NRP |
+| UCSDNT | UCSD Network Telescope | SDSC Expanse |
+
+**The `runs on` column is the inventory below, read from the other side.** ASN and BGP are the
+two modules that run on a laptop, and the reason is visible in the table: every dataset they read
+resolves to a public coordinate. Every other module reads at least one thing that is served only
+in-cluster, needs a credential, or has to be deployed first — which is what fixes it to the hub,
+or in UCSDNT's case to Expanse. It is a data constraint, not a compute one. `venue` in
+[assignments/registry.toml](../assignments/registry.toml) is the machine-readable form.
 
 `IYP` and `UCSDNT` are not yet listed on the assignments page; the codes are settled and will appear
 there. Note also that the published `IRR` entry links to `nids-irr-rpki-whois-local`, while the
@@ -108,7 +115,8 @@ Two consequences of the mirror worth stating outright:
 Reachability requirements that are not datasets, and so are not listed above:
 
 - **PyPI egress.** Every assignment except ASN and IYP opens with a `%pip install`. Checked by
-  [notebooks/test.ipynb](../notebooks/test.ipynb).
+  [notebooks/test.ipynb](../notebooks/test.ipynb). On a hub running the `nids-hub` image the
+  packages are already present and this is a fallback rather than the path.
 - **Public DNS resolution.** DNS resolves real name servers at runtime with `dns.resolver` — a
   *required* check in its own environment check, distinct from reading the OpenINTEL archive.
 - **Spark JAR resolution.** DNS and UCSDNT both set `spark.jars.packages`, which resolves through

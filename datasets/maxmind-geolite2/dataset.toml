@@ -10,7 +10,8 @@ served_from = "ceph-only"
 setup = "undocumented"      # ❌
 time_sensitive = "yes"      # YYYY-MM-DD build date, as a filename PREFIX
 credentials = []
-# Whether the mirror is licensed to re-serve GeoLite2 is an open question. [unverified]
+# Whether the mirror is licensed to re-serve GeoLite2 has not been established, and it
+# gates this module. Obtain GeoLite2 under your own MaxMind account if you deploy a hub.
 licence = "MaxMind GeoLite2 EULA upstream; mirror redistribution unverified"
 
 [access]

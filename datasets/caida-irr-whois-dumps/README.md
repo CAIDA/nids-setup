@@ -59,8 +59,8 @@ date is the sample the assignment's own check uses.
 Known:
 
 - **Upstream sources:** each of the 16 IRRs publishes its own database dump over FTP/HTTPS; RADB's is
-  at `ftp.radb.net/radb/dbase/`. **[unverified]** whether CAIDA fetches each registry directly or
-  obtains a pre-assembled collection.
+  at `ftp.radb.net/radb/dbase/`. **Not established:** whether CAIDA fetches each registry
+  directly or obtains a pre-assembled collection.
 - **Target path:** `caida/routing/irr_dumps/<YYYY-MM-DD>/ftp.radb.net/radb/dbase/<source>.db.gz`.
 - **Artifact shape:** gzip RPSL, apparently verbatim from upstream, re-filed under a single dated
   directory that mirrors RADB's FTP layout for every source.
