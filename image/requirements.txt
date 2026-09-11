@@ -1,8 +1,8 @@
 # Python dependencies for the combined NIDS JupyterHub image.
 #
-# After D15 (2026-09-09) the image is the ONLY environment the hub-bound modules have,
-# so this file must cover every module whose venue includes "nrp" -- not just the four it
-# originally listed. The per-module dependency lists are declared in
+# The image is the only environment the hub modules have, so this file must cover every
+# module whose venue includes "nrp" -- not just the four it originally listed. ASN and BGP
+# are also here: they run on the hub as well as on a laptop. The per-module lists live in
 # assignments/registry.toml under [<CODE>.environment]; that file is the source of truth
 # and this one is its union. Adding a module, or changing its `extra`, means editing here
 # too.
