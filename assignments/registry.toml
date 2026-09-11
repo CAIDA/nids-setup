@@ -102,8 +102,9 @@ status = "active"
 check = "00-environment-check.ipynb"
 
 [IRR.environment]
-# py-radix and tqdm are imported by the notebook but are NOT in image/requirements.txt,
-# so a local environment built from this block is wider than the hub image. Deliberate.
+# py-radix and tqdm are imported by the notebook. Both are now in image/requirements.txt
+# too (added 2026-09-10 under D15: the image is this module's only environment), so this
+# block and the image agree rather than the image being narrower.
 extra = ["py-radix", "tqdm"]
 
 [[IRR.datasets]]
@@ -136,7 +137,8 @@ blocked_on = "an in-namespace Postgres deployment"
 check = "00-environment-check.ipynb"
 
 [ITDK.environment]
-# From the notebook's imports; also absent from the hub image.
+# From the notebook's imports. All five are in image/requirements.txt as of 2026-09-10
+# (python-dotenv arrives via the IYP block there).
 extra = ["sqlalchemy", "psycopg2-binary", "pycountry", "scipy", "python-dotenv"]
 
 [ITDK.environment.key]

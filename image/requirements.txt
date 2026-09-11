@@ -1,11 +1,24 @@
 # Python dependencies for the combined NIDS JupyterHub image.
 #
-# This is the union of the assignment key notebooks' actual imports:
+# After D15 (2026-09-09) the image is the ONLY environment the hub-bound modules have,
+# so this file must cover every module whose venue includes "nrp" -- not just the four it
+# originally listed. The per-module dependency lists are declared in
+# assignments/registry.toml under [<CODE>.environment]; that file is the source of truth
+# and this one is its union. Adding a module, or changing its `extra`, means editing here
+# too.
+#
+#   - nids-asn-introduction  : pandas, matplotlib, requests  (also venue "local")
 #   - nids-bgp-control-plane : pybgpkit-parser, pelicanfs, py-radix, pandas, matplotlib
+#                              (also venue "local")
+#   - nids-irr-rpki-whois    : py-radix, tqdm
+#   - nids-itdk              : sqlalchemy, psycopg2-binary, pycountry, scipy, python-dotenv
 #   - nids-telescope-traffic : dpkt, pandas, pyarrow, pybgpkit-parser, pelicanfs,
 #                              py-radix, geoip2, maxminddb, matplotlib
 #   - nids-dns-ecosystem     : pyspark, tldextract, dnspython, numpy, requests, matplotlib
 #   - nids-iyp               : neo4j, python-dotenv, pandas, matplotlib
+#
+# nids-ucsdnt-expanse is deliberately absent: its venue is "expanse" (Slurm on SDSC),
+# not this image.
 #
 # Version specifiers below come from nids-telescope-traffic/.../requirements.txt
 # (the only assignment that pins). The rest are left unpinned to match the notebooks'
@@ -36,6 +49,20 @@ tldextract
 dnspython               # import as `import dns.resolver`
 numpy
 requests
+
+# --- Registries: WHOIS, IRR & RPKI ---
+# py-radix is already pinned above. tqdm is the only addition; both are declared in
+# registry.toml [IRR.environment].
+tqdm
+
+# --- ITDK ---
+# From registry.toml [ITDK.environment]. The module is release = "later" and
+# status = "blocked" on an in-namespace Postgres, but its venue is "nrp" only, so the
+# image is where these have to be. python-dotenv is shared with IYP, below.
+sqlalchemy
+psycopg2-binary         # binary wheel: no libpq/compiler needed at image build time
+pycountry
+scipy
 
 # --- IYP (Internet Yellow Pages) ---
 # pandas + matplotlib are already covered above; jupyterlab comes from the base image.

@@ -438,6 +438,14 @@ def cmd_data(args):
 
     Per repo rather than a shared cache because the notebooks use relative paths --
     `Path("data/as2org.jsonl")` -- so this is what makes a staged file visible to them.
+
+    **Both the student repo and the `-key` repo are staged**, whichever of them is cloned.
+    Staging only the student repo was a real defect: the key notebooks read the same
+    relative `data/` paths, so whatever a person last left there is what a key is graded
+    against. On 2026-09-09 that was a `20260801` as2org file from the 2026-09-03 rehearsal,
+    while the student repo held the pinned `20260501` -- exactly the key/student vintage
+    split that `[stage] source = "public"` and `serial = "20260501"` exist to prevent.
+    A repo that is not cloned is skipped, as before.
     """
     root = find_root(getattr(args, "root", None))
     datasets = nids_registry.load_datasets()
@@ -452,25 +460,34 @@ def cmd_data(args):
     for code, assignment in assignments.items():
         if codes and code not in codes:
             continue
-        repo = root / assignment.repo if assignment.repo else None
         wanted = [(datasets[e["id"]], assignment.pins_for(e["id"]))
                   for e in assignment.datasets
                   if e["id"] in datasets and datasets[e["id"]].stage]
         if not wanted:
             continue
         print(f"{code}")
-        if repo is None or not repo.is_dir():
-            print(f"  skipped -- {assignment.repo} is not cloned under {root}")
+
+        # Student repo and key repo both read `data/<file>` relative to themselves, so both
+        # need staging; see this function's docstring for what staging only the first cost.
+        targets = [name for name in (assignment.repo, assignment.key_repo) if name]
+        cloned = [(name, root / name) for name in targets if (root / name).is_dir()]
+        if not cloned:
+            print(f"  skipped -- {' / '.join(targets)} not cloned under {root}")
             continue
-        for dataset, pins in wanted:
-            if code not in dataset.stage.get("into", [code]):
-                continue
-            line = stage_one(dataset, pins, repo / "data", source, args.force)
-            print(f"  {line}")
-            if "FAILED" in line:
-                failed += 1
-            else:
-                staged += 1
+
+        for name, repo in cloned:
+            if len(cloned) > 1:
+                print(f"  {name}")
+            prefix = "    " if len(cloned) > 1 else "  "
+            for dataset, pins in wanted:
+                if code not in dataset.stage.get("into", [code]):
+                    continue
+                line = stage_one(dataset, pins, repo / "data", source, args.force)
+                print(f"{prefix}{line}")
+                if "FAILED" in line:
+                    failed += 1
+                else:
+                    staged += 1
         print()
 
     print(f"{staged} staged, {failed} failed")
