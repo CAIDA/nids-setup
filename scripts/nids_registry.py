@@ -187,9 +187,10 @@ class Assignment:
         # that is not derivable from the dataset fields. Unmarked means not in v1 --
         # a new module has to opt in, never land in the release by omission.
         self.release = data.get("release", "later")
-        # Where the module is supported (D15, 2026-09-09). Every module runs on the NRP
-        # hub, so that is the default and a block that says nothing is hub-only; "local"
-        # is an admission a module earns and `_venue_problems` enforces half of.
+        # Where the module is supported: "local", "nrp", "expanse". The NRP hub is the
+        # venue for the collection, so that is the default and a block that says nothing
+        # is a hub module; "local" is a qualification a module earns on its environment
+        # and its data, and `_venue_problems` enforces the data half.
         self.venue = data.get("venue", ["nrp"])
         self.check_notebook = data.get("check")
         # Optional commit pin, honoured by clone-nids-repos.sh. Unset means track the
@@ -255,11 +256,15 @@ def load_datasets(root=None):
     return found
 
 
-def load_assignments(root=None, release=None):
+def load_assignments(root=None, release=None, venue=None):
     """assignments/registry.toml, keyed by assignment code. Empty dict if absent.
 
-    `release="r1"` narrows to the modules that ship in v1; None or "all" returns every
-    block.
+    Two independent filters, because they answer different questions. `release` is
+    editorial -- which modules ship in a given round. `venue` is physical -- where a
+    module can actually be run. `venue="local"` is the one that matters most often:
+    it is how a laptop setup selects ASN and BGP without naming them.
+
+    Either may be None or "all" to mean no filtering; both combine as an intersection.
     """
     path = repo_root(root) / "assignments" / "registry.toml"
     if not path.exists():
@@ -267,9 +272,11 @@ def load_assignments(root=None, release=None):
     data = tomllib.loads(path.read_text(encoding="utf-8"))
     data.pop("schema", None)
     found = {code: Assignment(code, block) for code, block in data.items()}
-    if release in (None, "all"):
-        return found
-    return {code: a for code, a in found.items() if a.release == release}
+    if release not in (None, "all"):
+        found = {code: a for code, a in found.items() if a.release == release}
+    if venue not in (None, "all"):
+        found = {code: a for code, a in found.items() if venue in a.venue}
+    return found
 
 
 def datasets_in_release(datasets, assignments, release="r1"):
@@ -397,11 +404,10 @@ def validate(root=None):
 def _venue_problems(datasets, assignments):
     """The local-venue guard: a module claiming `local` must read only public data.
 
-    Rekeyed from release to venue 2026-09-09 (D15). The old guard asked "is this in
-    release 1?", which was the right question while release 1 *was* the laptop scope.
-    It no longer is -- a hub-bound module may ship in a release and legitimately read
-    an in-cluster or credentialed dataset. What cannot happen is a module advertising
-    the laptop path while depending on something a laptop cannot reach.
+    Keyed on venue rather than on release, because the two are independent: a hub module
+    may ship in a release and legitimately read an in-cluster or credentialed dataset.
+    What cannot happen is a module advertising the laptop path while depending on
+    something a laptop cannot reach.
 
     Both clauses earn their place. `public_access` catches maxmind-geolite2 and
     ucsd-nt-pcap-samples, which declare no credentials and are still closed; the

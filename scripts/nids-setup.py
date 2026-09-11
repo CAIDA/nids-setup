@@ -4,7 +4,7 @@
   scripts/nids-setup.py discover              what is here, and what state it is in
   scripts/nids-setup.py doctor                discover, plus a reachability pass
   scripts/nids-setup.py doctor --assignment BGP
-  scripts/nids-setup.py env --release r1      one environment that runs every r1 notebook
+  scripts/nids-setup.py env --venue local     one environment that runs ASN and BGP
   scripts/nids-setup.py data --release r1     stage each module's data into its data/ dir
   scripts/nids-setup.py verify --release r1   run the key notebooks; what is ready to hand out
 
@@ -17,9 +17,11 @@ datasets/SCHEMA.md).
 executes notebooks but saves nothing -- it needs the -key repos, which are private, so it is an
 instructor-side command.
 
-Module selection is the same on every subcommand: --release picks a whole tier (r1 is the
-four modules that read only public data), --assignment picks individual codes, and the two
-combine as an intersection. With neither, every registered module is in scope.
+Module selection is the same on every subcommand, and there are two axes because they answer
+different questions. --venue is physical: where a module can be run (local, nrp, expanse), and
+--venue local is ASN and BGP. --release is editorial: which round a module ships in.
+--assignment picks individual codes. All three combine as an intersection, and with none of
+them every registered module is in scope.
 
 Root directory, in order: --root, $NIDS_ROOT, the parent of this checkout.
 """
@@ -51,23 +53,44 @@ def find_root(explicit=None):
     return nids_registry.repo_root().parent
 
 
+def codes_from(values):
+    """Normalise --assignment into upper-case codes, or None.
+
+    Accepts both the repeatable form (--assignment ASN --assignment BGP) and the comma
+    form (--assignment ASN,BGP), because people reach for both and neither is wrong.
+    """
+    if not values:
+        return None
+    codes = [c.strip().upper() for v in values for c in str(v).split(",") if c.strip()]
+    return codes or None
+
+
 def select(args):
     """(assignments, codes) for this invocation -- the one place selection is decided."""
     release = getattr(args, "release", None)
-    assignments = nids_registry.load_assignments(release=release)
+    venue = getattr(args, "venue", None)
+    assignments = nids_registry.load_assignments(release=release, venue=venue)
     if not assignments:
-        if release:
-            raise SystemExit(f"no modules with release = {release!r} in assignments/registry.toml")
+        scope = ", ".join(f"{k} = {v!r}" for k, v in
+                          (("release", release), ("venue", venue)) if v)
+        if scope:
+            raise SystemExit(f"no modules with {scope} in assignments/registry.toml")
         raise SystemExit("assignments/registry.toml is missing -- nothing to do")
     codes = None
-    if getattr(args, "assignment", None):
-        codes = {c.upper() for c in args.assignment}
+    if codes_from(getattr(args, "assignment", None)):
+        codes = set(codes_from(args.assignment))
         unknown = codes - set(assignments)
         if unknown:
             known = ", ".join(sorted(assignments))
-            scope = f" in release {release}" if release else ""
+            # Name the filter that excluded them: "unknown code DNS" is baffling when the
+            # real answer is that DNS exists but is not a local module.
+            scope = ""
+            if venue:
+                scope = f" for venue {venue}"
+            elif release:
+                scope = f" in release {release}"
             raise SystemExit(f"unknown assignment code{scope}: {', '.join(sorted(unknown))}"
-                             f"\nknown: {known}")
+                             f"\nknown{scope}: {known}")
     return assignments, codes
 
 
@@ -291,7 +314,9 @@ def cmd_env(args):
     assignments, codes = select(args)
     # Registry order, not set order, so the printed list and the generated file are stable.
     selected = [c for c in assignments if not codes or c in codes]
-    tier = args.release or "all"
+    # A venue selection and a release selection are different sets and must not share a
+    # generated file: a venue selection and a release selection can diverge at any time.
+    tier = getattr(args, "venue", None) or args.release or "all"
     # The filename tracks the whole selection: a subset must not overwrite the tier's file.
     slug = tier if not codes else "-".join(selected).lower()
     label = f"{tier} / {','.join(selected)}" if codes else tier
@@ -625,7 +650,7 @@ def cmd_verify(args):
     """
     root = find_root(getattr(args, "root", None))
     assignments, codes = select(args)
-    tier = args.release or "all"
+    tier = getattr(args, "venue", None) or args.release or "all"
 
     venv = pathlib.Path(args.path).expanduser().resolve() if args.path \
         else nids_registry.repo_root() / ".venv"
@@ -831,7 +856,7 @@ def cmd_clone(args):
     if args.include_key and not token:
         raise SystemExit("--include-key needs a GitHub token; every *-key repo is private")
 
-    tier = args.release or "all"
+    tier = getattr(args, "venue", None) or args.release or "all"
     scope = f"{tier}, modules {','.join(sorted(codes))}" if codes else tier
     print(f"source: assignments/registry.toml ({scope})")
     print(f"root:   {root}")
@@ -874,17 +899,25 @@ def cmd_clone(args):
 class Selection:
     """The module selection, in the form each subcommand's parser expects."""
 
-    def __init__(self, release, modules):
+    def __init__(self, release, modules, venue=None):
         self.release = release
+        self.venue = venue
         self.assignment = modules or None
 
 
 def cmd_setup(args):
     """Clone the module repos, build one environment, and stage their data."""
-    modules = ([m.strip().upper() for m in args.modules.split(",") if m.strip()]
-               if args.modules else None)
+    modules = codes_from(getattr(args, "assignment", None))
     root = find_root(getattr(args, "root", None))
-    sel = Selection(args.release, modules)
+
+    # What a mode selects when the user names nothing. --local means "the modules that run
+    # here", which is a venue question, not a release one: selecting release 1 on a laptop
+    # would pull in DNS and try to install pyspark against a JVM that is not there. --nrp
+    # means "the modules shipping in this release", because the hub runs all of them.
+    release, venue = args.release, None
+    if args.mode == "local" and not modules:
+        release, venue = None, "local"
+    sel = Selection(release, modules, venue)
 
     skip_env, env_note = args.skip_env, "skipped (--skip-env)"
     if args.mode == "nrp" and not skip_env:
@@ -892,13 +925,12 @@ def cmd_setup(args):
         # shadow it and confuse the kernel the notebook actually runs in.
         skip_env, env_note = True, "skipped on NRP -- the hub image already provides the packages"
 
-    if args.mode == "local":
-        # D15 (2026-09-09): NRP is the supported venue for every module; `local` is an
-        # admission a module earns in the registry. Warn rather than refuse -- several
-        # hub-bound modules do run on a laptop that happens to have the right host
+    if args.mode == "local" and modules:
+        # Only reachable when the user named modules explicitly. Warn rather than refuse:
+        # a hub module may well run on a laptop that happens to have the right host
         # prerequisite, and we would rather someone try it than be stopped by a claim.
-        offhub = [code for code, a in nids_registry.load_assignments(release=args.release).items()
-                  if not a.runs_local and (not modules or code in modules)]
+        offhub = [code for code, a in nids_registry.load_assignments().items()
+                  if not a.runs_local and code in modules]
         if offhub:
             print(f"note: {', '.join(offhub)} {'is' if len(offhub) == 1 else 'are'} supported "
                   f"on the NRP hub, not on a laptop.\n"
@@ -906,7 +938,7 @@ def cmd_setup(args):
                   f"unsupported;\n"
                   f"      see the module's README for what its venue needs.\n")
 
-    where = f"{args.mode}, release {args.release}"
+    where = args.mode if venue else f"{args.mode}, release {release}"
     if modules:
         where += f", modules {','.join(modules)}"
     print("=" * 62)
@@ -916,7 +948,8 @@ def cmd_setup(args):
 
     print("\n--- 1/3  cloning module repositories -------------------------")
     clone_args = argparse.Namespace(
-        root=getattr(args, "root", None), release=args.release, assignment=sel.assignment,
+        root=getattr(args, "root", None), release=sel.release, venue=sel.venue,
+        assignment=sel.assignment,
         include_key=False, proto=None, org="CAIDA", jobs=args.jobs, dry_run=False)
     if cmd_clone(clone_args) != 0:
         sys.stderr.write(
@@ -931,7 +964,8 @@ def cmd_setup(args):
         print(env_note)
     else:
         env_args = argparse.Namespace(
-            root=getattr(args, "root", None), release=args.release, assignment=sel.assignment,
+            root=getattr(args, "root", None), release=sel.release, venue=sel.venue,
+            assignment=sel.assignment,
             path=None, python=args.python, requirements_only=False,
             register_kernel=False, dry_run=False)
         status = cmd_env(env_args)
@@ -943,7 +977,8 @@ def cmd_setup(args):
         print("skipped (--skip-data)")
     else:
         data_args = argparse.Namespace(
-            root=getattr(args, "root", None), release=args.release, assignment=sel.assignment,
+            root=getattr(args, "root", None), release=sel.release, venue=sel.venue,
+            assignment=sel.assignment,
             nrp=(args.mode == "nrp"), force=False)
         status = cmd_data(data_args)
         if status:
@@ -968,8 +1003,8 @@ def cmd_setup(args):
 # writes to a repo, because an instructor's first run of an unfamiliar tool should not
 # change anything.
 #
-# Explicitly out of scope (PLAN.md Phase 5): generating student repos from key repos,
-# which is nids-module-creator's job, and anything touching GitHub Classroom.
+# Explicitly out of scope: generating student repos from key repos, which is
+# nids-module-creator's job, and anything touching GitHub Classroom.
 
 # Paths that are noise in a key-vs-student comparison: build droppings, the staged data
 # the tooling puts there, and the checkpoints Jupyter writes beside every notebook.
@@ -1097,14 +1132,17 @@ def prep_datasets(code, args=None):
 def prep_venue(assignment):
     """(d) Where this module is supported, and what the instructor needs to teach it.
 
-    Venue comes first because after D15 it is the fact that decides everything else: an
-    instructor reading this needs to know whether to send students to a laptop or to
-    arrange namespace access before term starts.
+    Venue comes first because it is the fact that decides everything else: an instructor
+    reading this needs to know whether to send students to a laptop or to arrange
+    namespace access before term starts, and the second answer has a lead time.
     """
     lines = []
     venue = ", ".join(assignment.venue)
     if assignment.runs_local:
         lines.append(f"[ ok ] venue: {venue} -- students can run this on their own machines")
+    elif "expanse" in assignment.venue:
+        lines.append(f"[ ok ] venue: {venue} -- runs under Slurm on SDSC Expanse, not on the "
+                     f"hub; students need their own allocation")
     else:
         lines.append(f"[ ok ] venue: {venue} -- students need access to that venue; the "
                      f"laptop path is untested and unsupported")
@@ -1267,22 +1305,28 @@ def main(argv=None):
         p.add_argument("--root", default=argparse.SUPPRESS,
                        help="directory holding the cloned repos")
         p.add_argument("--assignment", action="append", metavar="CODE",
-                       help="limit to one assignment code; repeatable")
+                       help="limit to these assignment codes; repeatable, and accepts a "
+                            "comma-separated list")
         p.add_argument("--release", metavar="TIER",
                        help="limit to a release tier, e.g. r1"
                             + (" (default: r1)" if name == "setup" else " (default: every module)"))
+        if name != "setup":
+            # `setup` derives the venue from --local/--nrp instead, so offering both there
+            # would be two ways to say one thing.
+            p.add_argument("--venue", choices=("local", "nrp", "expanse"),
+                           help="limit to modules supported at this venue; "
+                                "'local' is ASN and BGP")
         p.set_defaults(handler=handler)
         if name == "setup":
             # --release carries a default here and nowhere else: `setup` is the command a
-            # newcomer runs, and it should mean "set up the shipping release".
+            # newcomer runs, and it should mean "set up the shipping release". On --local
+            # cmd_setup replaces it with the local venue, which is the narrower answer.
             p.set_defaults(release="r1")
             where = p.add_mutually_exclusive_group(required=True)
             where.add_argument("--local", dest="mode", action="store_const", const="local",
                                help="set up on your own machine, using public data")
             where.add_argument("--nrp", dest="mode", action="store_const", const="nrp",
                                help="set up on NRP's JupyterHub, using the in-cluster mirror")
-            p.add_argument("--modules", metavar="A,B",
-                           help="only these modules (default: everything in the release)")
             p.add_argument("--python", metavar="EXE",
                            help="interpreter to build the environment with "
                                 "(not the one running this)")

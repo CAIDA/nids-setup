@@ -41,7 +41,8 @@ PURE = ("-py3-none-any.whl", "-py2.py3-none-any.whl")
 # to catch. A package listed here can still be unusable on a platform for other reasons.
 BENIGN_SOURCE_ONLY = {
     "pyspark": "pure Python plus JARs; no compiler needed. Separately needs a JVM, and "
-               "on Windows winutils.exe + HADOOP_HOME -- see PLAN.md.",
+               "on Windows winutils.exe + HADOOP_HOME -- which is why DNS is a hub "
+               "module rather than a local one.",
 }
 
 

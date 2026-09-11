@@ -362,8 +362,8 @@ def main(argv=None):
     parser.add_argument("--assignment", metavar="CODE",
                         help="check only the datasets one assignment reads (e.g. BGP)")
     parser.add_argument("--release", default="r1", choices=("r1", "all"),
-                        help="which release to check: r1 (default) is the modules that need "
-                             "only publicly downloadable data; all checks every dataset")
+                        help="which release to check: r1 (default) is ASN and BGP; "
+                             "all checks every dataset")
     args = parser.parse_args(argv)
 
     datasets = nids_registry.load_datasets()
