@@ -7,7 +7,7 @@
 > **Path: your own hub — skippable on the community hub.** `kubectl` is only needed to *deploy and
 > operate* a JupyterHub of your own. **No assignment ever needs it**: every dataset is read from
 > inside the notebook server over HTTP, S3A, or Postgres, never through Kubernetes. If you are using
-> the [community hub](../README.md#start-here-whose-hub-will-you-use), skip this guide and start at
+> the [community hub](../README.md#running-on-nrp), skip this guide and start at
 > [NRP & Namespace](2_nrp_namespace.md) — install `kubectl` only if you want to inspect your
 > namespace from the command line.
 

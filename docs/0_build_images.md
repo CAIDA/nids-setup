@@ -1,9 +1,10 @@
 # Building and Publishing the Hub Image
 
-> **Maintainers only.** The image is already built and published — the setup guides start at
-> [Install kubectl](1_kubectl_install.md), and deploying a hub only needs to *pull* the image. You
-> need this page when you **change** the image: a new Python dependency, a new assignment, or a
-> base-image bump. Then you rebuild it and push a new tag.
+> **Maintainers only.** Most readers do not need this page: the deployment guides start at
+> [Install kubectl](1_kubectl_install.md), and a hub configured with an image path only needs to
+> *pull* it. You need this page when you **publish** the image — standing up a hub against a
+> registry of your own — or when you **change** it: a new Python dependency, a new module, or a
+> base-image bump.
 
 The JupyterHub in [JupyterHub](4_nrp_jupyterhub.md) runs a **single combined container image** shared
 by every NIDS assignment profile. Its sources are two files in this repo —
@@ -201,7 +202,7 @@ This image has not yet been built end to end, so treat the first run as its acce
 | `exec format error` at pod start | Image built for the wrong CPU architecture | You omitted `--platform linux/amd64`; rebuild with it. Optionally also pin `nodeSelector` to `amd64` in `values.yaml` |
 | Build crawls on Apple Silicon | `linux/amd64` runs under QEMU emulation | Expected. Build on an x86 host, or attach a remote amd64 builder with `docker buildx create` |
 | `no space left on device` | Extracted base + compiled deps + JARs need well over 10 GB | `docker system prune -a` and raise Docker Desktop's disk image size (Settings → Resources) |
-| `error committing ...: write /var/lib/docker/buildkit/metadata_v2.db: input/output error`, often with `Failed to remove contents in a temporary directory` just before it, and Docker unresponsive afterwards | **The host disk is full**, not Docker's VM. On macOS `Docker.raw` grows on demand, so buildkit hits an I/O error rather than a clean `ENOSPC`. **[verified]** — this is what a real build attempt hit here, with 16 GiB free on the host | `df -h` first. Free host space, then `docker system prune -a`. Docker Desktop may need a restart to recover |
+| `error committing ...: write /var/lib/docker/buildkit/metadata_v2.db: input/output error`, often with `Failed to remove contents in a temporary directory` just before it, and Docker unresponsive afterwards | **The host disk is full**, not Docker's VM. On macOS `Docker.raw` grows on demand, so buildkit hits an I/O error rather than a clean `ENOSPC`. this is what a real build attempt hit here, with 16 GiB free on the host | `df -h` first. Free host space, then `docker system prune -a`. Docker Desktop may need a restart to recover |
 | `denied: requested access to the resource is denied` | Not logged in, or `IMAGE` names a namespace you can't push to | Rerun [Step 2](#step-2-log-in-to-the-registry); confirm `IMAGE` matches your registry account |
 | Push stalls or dies partway | A multi-GB layer over a slow uplink | Rerun the script — `docker push` resumes from the layers already accepted |
 | Every rebuild is slow, not just the first | The base image moved, invalidating the layer cache | The base is digest-pinned in [image/Dockerfile](../image/Dockerfile); bump it deliberately, not incidentally |

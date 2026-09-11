@@ -8,7 +8,7 @@
 > **Community hub** — Steps 1–3 only, in their community-hub form: spawn a server, upload the
 > notebook, run it. Skip Step 5 (no spawner profiles to repeat across) and the `kubectl` lookups.
 > **Your own hub** — the whole guide, Steps 1–6.
-> Which path you are on was decided [here](../README.md#start-here-whose-hub-will-you-use).
+> Which path you are on was decided [here](../README.md#running-on-nrp).
 
 `helm upgrade` returning and `kubectl get pods` showing `Running` prove the hub *deployed*. Neither
 proves the thing that matters: that inside a spawned server the dependencies import, the memory

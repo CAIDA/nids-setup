@@ -6,7 +6,7 @@
 
 > **Path: split — read the first half either way.**
 > **Steps 1–3 are for everyone.** You need an NRP identity and a namespace whether you use the
-> [community hub](../README.md#start-here-whose-hub-will-you-use) or deploy your own, and approval
+> [community hub](../README.md#running-on-nrp) or deploy your own, and approval
 > can take days — start here.
 > **Steps 4–5 (`HUB_HOST` and the CILogon OAuth application) are for your own hub only.** The
 > community hub already has a hostname and its own OAuth registration; skip both sections and
