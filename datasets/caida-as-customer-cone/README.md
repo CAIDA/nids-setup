@@ -53,11 +53,12 @@ whoever has the answer can complete it; nothing here should be treated as a proc
 Known:
 
 - **Upstream source:** `https://publicdata.caida.org/datasets/as-relationships/serial-1/`, which
-  publishes `<YYYYMMDD>.ppdc-ases.txt.bz2` monthly. **[unverified]** as the actual mirror source.
+  publishes `<YYYYMMDD>.ppdc-ases.txt.bz2` monthly. **Not established:** that this is the actual
+  mirror source.
 - **Target path:** `caida/as-relationships/<YYYYMMDD>.ppdc-ases.txt.bz2` in the Ceph `caida` bucket,
   served by `rook-ceph-rgw-nautiluss3.rook`.
 - **Artifact shape:** copied verbatim — the mirrored filename and bz2 format match upstream, so no
-  transformation appears to be involved. **[unverified]**
+  transformation appears to be involved. **Not established:** that it is verbatim.
 
 Must be recovered:
 

@@ -5,7 +5,7 @@
 # Configuring `kubectl` for Your NRP Namespace
 
 > **Path: your own hub — skippable on the community hub.** You never run `kubectl` against your
-> namespace on the [community hub](../README.md#start-here-whose-hub-will-you-use); skip to
+> namespace on the [community hub](../README.md#running-on-nrp); skip to
 > [Verify](5_verify_hub.md). The one reason to do it anyway: Step 4 below is the quickest
 > confirmation that your namespace is actually live.
 

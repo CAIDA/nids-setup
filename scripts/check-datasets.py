@@ -1,6 +1,10 @@
 #!/usr/bin/env python3
 """Check that every NIDS dataset is reachable from outside the NRP cluster.
 
+Every coordinate comes from the registry -- datasets/<id>/dataset.toml -- so this
+script holds no dataset paths of its own. Editing a path means editing the registry,
+which is also what the setup tooling reads.
+
 Full walkthrough: datasets/README.md
 
 The in-cluster counterpart is notebooks/check-datasets.ipynb, which runs the same
@@ -14,6 +18,7 @@ as warnings with an explanation, not failures, and do not affect the exit code.
 
 Usage:
   scripts/check-datasets.py
+  scripts/check-datasets.py --list
   UCSD_NT_S3_ACCESS_KEY=... UCSD_NT_S3_SECRET_KEY=... scripts/check-datasets.py
   ITDK_READ_DSN=postgresql://... scripts/check-datasets.py
 
@@ -29,12 +34,16 @@ credential-gated datasets, and any check skipped for a missing dependency are no
 required and never fail the run.
 """
 
+import argparse
 import importlib
+import json
 import os
 import socket
 import sys
 import urllib.error
 import urllib.request
+
+import nids_registry
 
 
 def have(module_name):
@@ -49,9 +58,6 @@ def have(module_name):
     except ImportError:
         return False
 
-
-HAVE_PELICANFS = have("pelicanfs.core")
-HAVE_NEO4J = have("neo4j")
 
 # --- check runner -------------------------------------------------------------
 # Self-contained on purpose: this runner is duplicated verbatim from
@@ -93,6 +99,29 @@ def http_head(url, timeout=60):
     req = urllib.request.Request(url, method="HEAD")
     with urllib.request.urlopen(req, timeout=timeout) as response:
         return response.status, response.headers
+
+
+def first_json_record(url, limit=1 << 20, timeout=60):
+    """Parse the first JSON-lines record of a (possibly gzipped) URL.
+
+    Reads a prefix rather than the whole file -- these run against multi-megabyte
+    downloads and the first record answers the question.
+    """
+    import gzip
+    import io
+    request = urllib.request.Request(url, headers={"Range": f"bytes=0-{limit - 1}"})
+    with urllib.request.urlopen(request, timeout=timeout) as response:
+        blob = response.read(limit)
+    if blob[:2] == b"\x1f\x8b":
+        # A truncated gzip stream raises at the end; the first member is all we need.
+        try:
+            blob = gzip.GzipFile(fileobj=io.BytesIO(blob)).read()
+        except (OSError, EOFError) as exc:
+            if not blob:
+                raise RuntimeError(f"could not decompress {url}: {exc}") from None
+            blob = gzip.GzipFile(fileobj=io.BytesIO(blob)).read1()
+    line = blob.split(b"\n", 1)[0]
+    return json.loads(line)
 
 
 def http_first_bytes(url, n=64, timeout=60):
@@ -153,136 +182,246 @@ def ceph_first_bytes(path, n=64, **kwargs):
     return _ceph(http_first_bytes, path, n, **kwargs)
 
 
-# --- dataset coordinates -------------------------------------------------------
-# Every value below is the one an assignment actually uses today. When one of
-# these goes stale, the matching datasets/<name>/README.md values table is the
-# other place that needs updating.
-
-OSDF_RIB_DIR = "/routeviews/route-views3/bgpdata/2026.05/RIBS"          # BGP
-RPKI_URL = "https://ftp.ripe.net/ripe/rpki/afrinic.tal/2023/03/01/roas.csv.xz"
-OI_ENDPOINT = "https://object.openintel.nl"
-OI_BUCKET_URL = f"{OI_ENDPOINT}/openintel-public"
-ANYCAST_URL = "https://manycast.net/api/v1/export/IPv4-latest.parquet"
-IYP_URI = "neo4j://iyp-bolt.ihr.live:7687"
-
-AS_CONE = "caida/as-relationships/20260501.ppdc-ases.txt.bz2"           # ASN, BGP
-AS2ORG = "caida/as2org/as2org.jsonl"                                    # ASN, BGP
-IRR_OBJECT = "caida/routing/irr_dumps/2023-03-01/ftp.radb.net/radb/dbase/radb.db.gz"
-PREFIX2AS_OBJECT = "caida/routing/routeviews-prefix2as/2023/03/routeviews-rv2-20230301-1200.pfx2as.gz"
-PCAP_A = "caida/ucsd-nt/sample_062026/ucsd-nt-sub.1782463980.anon.pcap.gz"
-GEOIP_DB = "caida/geolocation/maxmind/2026-06-24.GeoLite2-City.mmdb.gz"
-
-UCSDNT_ENDPOINT = "https://hermes.caida.org"
-UCSDNT_BUCKET = "telescope-ucsdnt-avro-flowtuple-v4-2026"
-UCSDNT_PREFIX = "datasource=ucsd-nt/year=2026/month=02/day=14/"
+# --- registry-driven checks --------------------------------------------------
+# There are no dataset paths in this file. Each check below is dispatched on the
+# `kind` in datasets/<id>/dataset.toml [check], and every URL it touches is
+# resolved from that dataset's template and defaults. When a coordinate goes
+# stale, datasets/<id>/dataset.toml is the one place that needs editing -- the
+# values table in the matching README.md is prose about the same fact.
 
 
-def main():
-    print("--- external: reachable from anywhere ---\n")
+def run_check(dataset, required_default=True):
+    """Run one dataset's declared check, recording the outcome."""
+    spec = dataset.check
+    kind = spec.get("kind")
+    module = spec.get("needs_module")
+    # The credential-gated kinds report a missing credential before a missing
+    # library: "set UCSD_NT_S3_ACCESS_KEY" is the actionable message, and the
+    # library only matters once you have one. Their bodies raise on ImportError.
+    gated = kind in ("s3-list", "sql-tables")
+    available = have(module) if module and not gated else True
+    required = required_default and available
 
-    with check("osdf: routeviews rib listing (BGP, TELESCOPE)", required=HAVE_PELICANFS) as c:
-        if not HAVE_PELICANFS:
-            raise RuntimeError("skipped: pip install pelicanfs")
-        from pelicanfs.core import OSDFFileSystem
-        objects = OSDFFileSystem().ls(OSDF_RIB_DIR)
-        assert objects, f"{OSDF_RIB_DIR} listed empty"
-        c.note = f"{len(objects)} objects in {OSDF_RIB_DIR}"
+    with check(spec["label"], required=required) as c:
+        if module and not gated and not available:
+            raise RuntimeError(f"skipped: {spec['needs_hint']}")
 
-    with check("ftp.ripe.net: rpki roas (IRR)") as c:
-        # The only assignment reaching this host. A namespace that allows CAIDA
-        # and OSDF but not RIPE fails here and nowhere else.
-        status, headers = http_head(RPKI_URL)
-        c.note = f"HTTP {status}, {human_size(headers)}"
+        if kind == "osdf-listing":
+            from pelicanfs.core import OSDFFileSystem
+            path = dataset.resolve()
+            objects = OSDFFileSystem().ls(path)
+            assert objects, f"{path} listed empty"
+            c.note = f"{len(objects)} objects in {path}"
 
-    with check("manycast.net: anycast census (DNS)") as c:
-        # This endpoint answers HEAD with 405, and ignores Range on a GET -- so
-        # read just the 4-byte Parquet magic off the front and drop the rest
-        # rather than pulling ~4 MiB.
-        head = http_first_bytes(ANYCAST_URL, 4)
-        assert head == b"PAR1", f"expected a Parquet file, got {head!r}"
-        c.note = "PAR1 magic ok"
+        elif kind == "http-head":
+            url = spec.get("url") or dataset.url()
+            status, headers = http_head(url)
+            c.note = f"HTTP {status}, {spec.get('note_suffix') or human_size(headers)}"
 
-    with check("object.openintel.nl: bucket is anonymously readable (DNS)") as c:
-        # HEAD on the S3 root is 403 by design; the bucket URL is the smallest
-        # request that proves anonymous access actually works. A real Parquet
-        # read needs Spark and the S3A jars -- that is the DNS assignment's own
-        # check, not this one.
-        status, _ = http_head(OI_BUCKET_URL)
-        c.note = f"HTTP {status}, openintel-public"
+        elif kind == "parquet-magic":
+            # This endpoint answers HEAD with 405 and ignores Range on a GET, so
+            # read just the 4-byte Parquet magic off the front and drop the rest
+            # rather than pulling ~4 MiB.
+            head = http_first_bytes(dataset.url(), 4)
+            assert head == b"PAR1", f"expected a Parquet file, got {head!r}"
+            c.note = "PAR1 magic ok"
 
-    with check("iyp: public bolt endpoint (IYP)", required=HAVE_NEO4J) as c:
-        if not HAVE_NEO4J:
-            raise RuntimeError("skipped: pip install neo4j")
-        from neo4j import GraphDatabase
-        db = GraphDatabase.driver(IYP_URI, auth=None)
-        try:
-            db.verify_connectivity()
-        finally:
-            db.close()
-        c.note = IYP_URI
+        elif kind == "bolt":
+            from neo4j import GraphDatabase
+            uri = dataset.url()
+            db = GraphDatabase.driver(uri, auth=None)
+            try:
+                db.verify_connectivity()
+            finally:
+                db.close()
+            c.note = uri
 
-    print("\n--- in-cluster Ceph: expected to fail outside NRP ---\n")
+        elif kind == "http-magic":
+            # The public-coordinate analogue of `magic`: prove the object is really
+            # there and is really what it claims, without pulling the whole file. A 200
+            # on its own would pass against an error page.
+            url = dataset.url()
+            magic = bytes.fromhex(spec["magic"])
+            head = http_first_bytes(url, len(magic))
+            assert head.startswith(magic), f"expected {magic.hex()}, got {head.hex()}"
+            c.note = f"magic ok, {url.rsplit('/', 1)[-1]}"
 
-    for label, path, magic in [
-        ("ceph: customer cone (ASN, BGP)", AS_CONE, b"BZh"),
-        ("ceph: as2org (ASN, BGP)", AS2ORG, None),
-        ("ceph: irr whois dumps (IRR)", IRR_OBJECT, b"\x1f\x8b"),
-        ("ceph: routeviews prefix2as (IRR)", PREFIX2AS_OBJECT, b"\x1f\x8b"),
-        ("ceph: ucsd-nt pcap sample (TELESCOPE)", PCAP_A, b"\x1f\x8b"),
-        ("ceph: maxmind geolite2 (TELESCOPE)", GEOIP_DB, b"\x1f\x8b"),
-    ]:
-        with check(label, required=False) as c:
-            head = ceph_first_bytes(path, len(magic) if magic else 8)
+        elif kind == "http-fields":
+            # Magic bytes prove the file is the right *format*, never the right content.
+            # caida-as2org passed `http-magic` for a week while serving a schema no
+            # notebook could read, so a dataset whose records the notebooks parse by name
+            # declares those names here and the first record has to carry them.
+            url = dataset.url()
+            record = first_json_record(url)
+            missing = [f for f in spec["fields"] if f not in record]
+            assert not missing, (
+                f"first record is missing {', '.join(missing)} -- "
+                f"has {', '.join(sorted(record))}")
+            c.note = f"fields ok ({', '.join(spec['fields'])})"
+
+        elif kind in ("magic", "readable"):
+            magic = bytes.fromhex(spec["magic"]) if kind == "magic" else None
+            head = ceph_first_bytes(dataset.resolve(), len(magic) if magic else 8)
             if magic:
                 assert head.startswith(magic), f"expected {magic!r}, got {head!r}"
             c.note = "magic ok" if magic else "readable"
 
+        elif kind == "s3-list":
+            access = os.environ.get(dataset.credentials[0])
+            secret = os.environ.get(dataset.credentials[1])
+            if not (access and secret):
+                raise RuntimeError(f"skipped: {spec['skip_hint']}")
+            try:
+                import boto3
+                from botocore.config import Config
+            except ImportError:
+                raise RuntimeError(f"skipped: {spec['needs_hint']}") from None
+            s3 = boto3.client(
+                "s3",
+                endpoint_url=dataset.access["endpoint"],
+                aws_access_key_id=access,
+                aws_secret_access_key=secret,
+                config=Config(
+                    signature_version=dataset.access["signature_version"],
+                    s3={"addressing_style": dataset.access["addressing_style"]},
+                ),
+            )
+            prefix = dataset.resolve()
+            listing = s3.list_objects_v2(
+                Bucket=dataset.access["bucket"], Prefix=prefix, MaxKeys=5
+            )
+            assert listing.get("KeyCount"), f"{prefix} listed empty"
+            c.note = f"{listing['KeyCount']}+ objects under {prefix}"
+
+        elif kind == "sql-tables":
+            dsn = os.environ.get(dataset.credentials[0])
+            if not dsn:
+                raise RuntimeError(f"skipped: {spec['skip_hint']}")
+            try:
+                from sqlalchemy import create_engine, text
+            except ImportError:
+                raise RuntimeError(f"skipped: {spec['needs_hint']}") from None
+            engine = create_engine(dsn)
+            schema = dataset.access["schema_name"]
+            with engine.connect() as conn:
+                tables = conn.execute(
+                    text("SELECT table_name FROM information_schema.tables "
+                         "WHERE table_schema = :schema ORDER BY table_name"),
+                    {"schema": schema},
+                ).scalars().all()
+            assert tables, f"schema {schema} has no tables"
+            # The DSN is never printed -- it carries a password.
+            c.note = f"{len(tables)} tables: {', '.join(tables)}"
+
+        else:
+            raise RuntimeError(f"unknown check kind {kind!r} in {dataset.path}")
+
+
+def in_cluster():
+    """True when the in-cluster Ceph hostname resolves, i.e. we are running on NRP.
+
+    Cached on the function because every Ceph dataset asks the same question. Off
+    cluster, a Ceph dataset being unreachable is the expected result and must not fail
+    the run -- that is the same rule the sectioned run applies by declaring the whole
+    Ceph section not-required.
+    """
+    if not hasattr(in_cluster, "_answer"):
+        host = CEPH.split("//", 1)[1]
+        try:
+            socket.getaddrinfo(host, 80)
+            in_cluster._answer = True
+        except socket.gaierror:
+            in_cluster._answer = False
+    return in_cluster._answer
+
+
+def _describe(dataset):
+    """A human address for a transport with no URL form, e.g. Postgres."""
+    access = dataset.access
+    if dataset.transport == "postgres":
+        return f"{access['service']}:{access['port']} schema {access['schema_name']}"
+    return f"({dataset.transport})"
+
+
+def list_registry(datasets):
+    """`--list`: what would be checked, and where each coordinate resolves to."""
+    for section in ("external", "ceph", "credentialed"):
+        for dataset in nids_registry.checks_in_order(datasets, section):
+            try:
+                where = dataset.check.get("url") or dataset.url() or _describe(dataset)
+            except KeyError:
+                where = "(needs an assignment pin)"
+            print(f"{section:12} {dataset.id:26} {where}")
+    return 0
+
+
+def main(argv=None):
+    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser.add_argument("--list", action="store_true",
+                        help="print the registry's checks and their resolved paths, run nothing")
+    parser.add_argument("--assignment", metavar="CODE",
+                        help="check only the datasets one assignment reads (e.g. BGP)")
+    parser.add_argument("--release", default="r1", choices=("r1", "all"),
+                        help="which release to check: r1 (default) is ASN and BGP; "
+                             "all checks every dataset")
+    args = parser.parse_args(argv)
+
+    datasets = nids_registry.load_datasets()
+    all_assignments = nids_registry.load_assignments()
+
+    if args.release != "all" and not args.assignment:
+        # Scope to what the release actually reads. Out-of-scope datasets are not
+        # attempted at all rather than attempted-and-skipped: an instructor's first run
+        # must not print red for datasets they will never touch.
+        in_release = nids_registry.datasets_in_release(datasets, all_assignments, args.release)
+        kept = {d.id for d in in_release}
+        dropped = sorted(set(datasets) - kept)
+        datasets = {i: d for i, d in datasets.items() if i in kept}
+        modules = sorted(c for c, a in all_assignments.items() if a.release == args.release)
+        print(f"release {args.release}: {', '.join(modules)} "
+              f"-- {len(kept)} datasets, {len(dropped)} out of scope\n")
+
+    if args.assignment:
+        assignments = all_assignments
+        code = args.assignment.upper()
+        if code not in assignments:
+            known = ", ".join(sorted(assignments)) or "none -- assignments/registry.toml is missing"
+            raise SystemExit(f"unknown assignment {code!r}. Known: {known}")
+        wanted = nids_registry.datasets_for(datasets, assignments, code)
+        if args.list:
+            for dataset, pins, required in wanted:
+                where = dataset.url(**pins) or _describe(dataset)
+                print(f"{code:12} {dataset.id:26} {where}")
+            return 0
+        print(f"--- {code}: {len(wanted)} datasets ---\n")
+        for dataset, pins, required in wanted:
+            # Off cluster, Ceph is unreachable by design and credential-gated datasets
+            # are opt-in; neither is this assignment being broken.
+            if not dataset.reachable_offsite and not in_cluster():
+                required = False
+            if dataset.credentials:
+                required = False
+            if pins:
+                # An assignment pin overrides the dataset default, so a check run
+                # this way tests the exact coordinate that assignment reads.
+                dataset.defaults = {**dataset.defaults, **pins}
+            run_check(dataset, required_default=required)
+        return report()
+
+    if args.list:
+        return list_registry(datasets)
+
+    print("--- external: reachable from anywhere ---\n")
+    for dataset in nids_registry.checks_in_order(datasets, "external"):
+        run_check(dataset)
+
+    print("\n--- in-cluster Ceph: expected to fail outside NRP ---\n")
+    for dataset in nids_registry.checks_in_order(datasets, "ceph"):
+        run_check(dataset, required_default=False)
+
     print("\n--- credential-gated: skipped unless configured ---\n")
-
-    with check("expanse: ucsd-nt flowtuple bucket (UCSDNT)", required=False) as c:
-        access = os.environ.get("UCSD_NT_S3_ACCESS_KEY")
-        secret = os.environ.get("UCSD_NT_S3_SECRET_KEY")
-        if not (access and secret):
-            raise RuntimeError(
-                "skipped: set UCSD_NT_S3_ACCESS_KEY and UCSD_NT_S3_SECRET_KEY "
-                "(see datasets/ucsdnt-expanse-flowtuple/)"
-            )
-        try:
-            import boto3
-            from botocore.config import Config
-        except ImportError:
-            raise RuntimeError("skipped: pip install boto3") from None
-        s3 = boto3.client(
-            "s3",
-            endpoint_url=UCSDNT_ENDPOINT,
-            aws_access_key_id=access,
-            aws_secret_access_key=secret,
-            config=Config(signature_version="s3v4", s3={"addressing_style": "path"}),
-        )
-        listing = s3.list_objects_v2(Bucket=UCSDNT_BUCKET, Prefix=UCSDNT_PREFIX, MaxKeys=5)
-        assert listing.get("KeyCount"), f"{UCSDNT_PREFIX} listed empty"
-        c.note = f"{listing['KeyCount']}+ objects under {UCSDNT_PREFIX}"
-
-    with check("itdk: postgres caida_itdk schema (ITDK)", required=False) as c:
-        dsn = os.environ.get("ITDK_READ_DSN")
-        if not dsn:
-            raise RuntimeError(
-                "skipped: set ITDK_READ_DSN and port-forward postgres-service "
-                "(see datasets/itdk-postgres/)"
-            )
-        try:
-            from sqlalchemy import create_engine, text
-        except ImportError:
-            raise RuntimeError("skipped: pip install sqlalchemy psycopg2-binary") from None
-        engine = create_engine(dsn)
-        with engine.connect() as conn:
-            tables = conn.execute(
-                text("SELECT table_name FROM information_schema.tables "
-                     "WHERE table_schema = 'caida_itdk' ORDER BY table_name")
-            ).scalars().all()
-        assert tables, "schema caida_itdk has no tables"
-        # The DSN is never printed -- it carries a password.
-        c.note = f"{len(tables)} tables: {', '.join(tables)}"
+    for dataset in nids_registry.checks_in_order(datasets, "credentialed"):
+        run_check(dataset, required_default=False)
 
     return report()
 

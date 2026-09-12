@@ -1,0 +1,34 @@
+schema = 1
+id = "iyp-neo4j"
+name = "IYP (Internet Yellow Pages) Neo4j graph"
+used_by = ["IYP"]
+produced_by = "external"
+public = true
+public_access = true        # [verified 2026-08-27] public instance, no credentials; bolt port open
+served_from = "both"
+setup = "documented"        # for the self-hosted path; none needed for the student path
+time_sensitive = "live"     # continuously updated, no pinned snapshot
+credentials = []            # public instance takes auth=None
+
+[access]
+transport = "bolt"
+template = "neo4j://iyp-bolt.ihr.live:7687"
+pins = []
+python_deps = ["neo4j"]
+
+# The instructor's self-hosted instance does not exist yet; the student path uses the
+# public instance above and is unaffected.
+[access.self_hosted]
+credentials = ["IYP_READ_URI", "IYP_READ_USER", "IYP_READ_PASSWORD"]
+credentials_file = "neo4j_credentials.env"
+deployed = false
+
+[defaults]
+
+[check]
+section = "external"
+order = 50
+label = "iyp: public bolt endpoint (IYP)"
+kind = "bolt"
+needs_module = "neo4j"
+needs_hint = "pip install neo4j"

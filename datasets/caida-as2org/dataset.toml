@@ -1,0 +1,72 @@
+schema = 1
+id = "caida-as2org"
+name = "CAIDA AS-to-Organization (as2org)"
+used_by = ["ASN", "BGP"]
+produced_by = "caida"
+public = true
+public_access = true
+served_from = "ceph-only"
+setup = "undocumented"
+time_sensitive = "yes"      # the published releases are dated; the in-cluster copy is not,
+                            # which hides its age rather than removing it
+credentials = []
+
+# Two places serve this dataset, and they are not interchangeable.
+#
+# NRP's in-cluster copy, below, is a flattened form built for these assignments. Its key
+# carries no version, so nothing that reads it can report which release it holds. The
+# notebooks fetch it directly when it is the only thing available.
+[access]
+transport = "ceph"
+host = "http://rook-ceph-rgw-nautiluss3.rook"   # resolves only inside the NRP cluster
+template = "caida/as2org/as2org.jsonl"
+pins = []
+format = "jsonl"
+
+# CAIDA's public releases, which are dated. This is the coordinate `nids-setup.py data`
+# uses, and the records are read straight from the JSONL:
+#   {"changed":"20171130","country":"US","name":"1-800 Contacts, Inc.",
+#    "organizationId":"1800CO-2-ARIN","source":"ARIN","type":"Organization"}
+[access.public]
+transport = "https"
+base = "https://publicdata.caida.org/datasets/as-organizations"
+template = "{serial}.as-org2info.jsonl.gz"
+pins = ["serial"]
+format = "gzip jsonl"
+verified = "2026-08-27"
+
+[defaults]
+# Matches the customer cone's pin so ASN reads one vintage across both its datasets.
+#
+# **Changing this changes every country figure the notebooks print, answer keys included.**
+# Re-run the key notebooks if you change it, or the keys will no longer match what a student
+# gets. Nothing else in the module depends on the value.
+serial = "20260501"
+
+# publicdata serves CAIDA's raw two-record export -- `Organization` rows carrying name and
+# country, `ASN` rows carrying an asn, joined on `organizationId`. The notebooks parse the
+# flattened one-row-per-organisation form instead, so staging rebuilds it; the notebooks need
+# no change either way.
+[stage]
+filename = "as2org.jsonl"
+into = ["ASN", "BGP"]
+transform = "as2org-flatten"
+# Stage the pinned release on NRP too, not just locally. Both venues then read the same dated
+# file, so a graded figure is the same wherever the notebook runs.
+source = "public"
+
+[check]
+section = "ceph"
+order = 20
+label = "ceph: as2org (ASN, BGP)"
+# No magic bytes: this doubles as test.ipynb's proof that the Ceph gateway works at all.
+kind = "readable"
+
+# Fields rather than magic bytes: a gzip check passes on the raw export, which no notebook can
+# read. These are the names the rebuild joins on, so this fails first if the schema moves.
+[check.public]
+section = "external"
+order = 31
+label = "publicdata: as2org (ASN, BGP)"
+kind = "http-fields"
+fields = ["organizationId", "type"]

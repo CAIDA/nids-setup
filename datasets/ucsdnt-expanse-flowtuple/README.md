@@ -98,7 +98,7 @@ involves a data-use agreement — recover the process before promising a class a
 ### 2. Obtain an Expanse allocation
 
 `ETP26_ACCOUNT` names the SDSC project used for both the Slurm allocation and the Lustre output path
-`/expanse/lustre/projects/<ETP26_ACCOUNT>/<USER>/output/`. **[unverified]** how the account is
+`/expanse/lustre/projects/<ETP26_ACCOUNT>/<USER>/output/`. **Not established:** how the account is
 requested.
 
 ### 3. Place the credentials file

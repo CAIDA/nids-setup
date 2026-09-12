@@ -1,0 +1,37 @@
+schema = 1
+id = "itdk-postgres"
+name = "ITDK router-level topology (Postgres)"
+used_by = ["ITDK"]
+produced_by = "caida"
+public = false              # the release files are public; the built database is not
+public_access = false       # a built database, unpublished; the release files are public, this is not
+served_from = "in-namespace"
+setup = "documented"
+time_sensitive = "yes"      # the loader targets a dated release
+credentials = ["ITDK_READ_DSN"]
+# No Postgres instance is deployed anywhere yet, so this assignment cannot run.
+deployed = false
+
+[access]
+transport = "postgres"
+schema_name = "caida_itdk"
+tables = ["itdk_node_as", "itdk_node_geolocation", "itdk_link_endpoints", "itdk_router_hostnames"]
+release = "ITDK-2026-03"
+credentials_file = "db_credentials.env"      # ITDK_CREDS_FILE overrides the path
+build_credential = "ITDK_BUILD_DSN"
+# Host depends on where the notebook runs: the in-cluster Service name when the hub
+# shares the namespace, or 127.0.0.1 through a kubectl port-forward otherwise.
+service = "postgres-service"
+port = 5432
+pins = []
+
+[defaults]
+
+[check]
+section = "credentialed"
+order = 20
+label = "itdk: postgres caida_itdk schema (ITDK)"
+kind = "sql-tables"
+needs_module = "sqlalchemy"
+needs_hint = "pip install sqlalchemy psycopg2-binary"
+skip_hint = "set ITDK_READ_DSN and port-forward postgres-service (see datasets/itdk-postgres/)"

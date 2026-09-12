@@ -1,0 +1,33 @@
+schema = 1
+id = "maxmind-geolite2"
+name = "MaxMind GeoLite2-City (Ceph mirror)"
+used_by = ["TELESCOPE"]
+produced_by = "external"    # MaxMind, CAIDA-mirrored
+public = false              # upstream is account- and licence-gated; the mirror is why
+public_access = false       # MaxMind requires an account and licence key, and geo-restricts downloads
+                            # the assignment needs neither
+served_from = "ceph-only"
+setup = "undocumented"      # ❌
+time_sensitive = "yes"      # YYYY-MM-DD build date, as a filename PREFIX
+credentials = []
+# Whether the mirror is licensed to re-serve GeoLite2 has not been established, and it
+# gates this module. Obtain GeoLite2 under your own MaxMind account if you deploy a hub.
+licence = "MaxMind GeoLite2 EULA upstream; mirror redistribution unverified"
+
+[access]
+transport = "ceph"
+host = "http://rook-ceph-rgw-nautiluss3.rook"
+# The date is a prefix, not a suffix.
+template = "caida/geolocation/maxmind/{build_date}.GeoLite2-City.mmdb.gz"
+pins = ["build_date"]
+format = "gzip MMDB, read with geoip2/maxminddb after decompression"
+
+[defaults]
+build_date = "2026-06-24"
+
+[check]
+section = "ceph"
+order = 60
+label = "ceph: maxmind geolite2 (TELESCOPE)"
+kind = "magic"
+magic = "1f8b"

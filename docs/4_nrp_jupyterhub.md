@@ -4,7 +4,9 @@
 
 # Deploying One JupyterHub for the NIDS Assignments
 
-This guide deploys a single JupyterHub into your NRP Nautilus namespace via Helm, with **one spawner profile per NIDS assignment**. It is aimed at the instructor/admin standing up a managed course environment for the CAIDA NIDS assignments (BGP control plane, telescope traffic, DNS ecosystem).
+This guide deploys a single JupyterHub into your NRP Nautilus namespace via Helm, with **one spawner profile per NIDS module**. It is aimed at the instructor/admin standing up a managed course environment.
+
+The hub is where most of the collection runs: every module except ASN and BGP, which also run on a student's laptop, and UCSDNT, which runs on SDSC Expanse instead. The profiles below cover the modules that have been sized so far — BGP control plane, telescope traffic, DNS ecosystem — and the pattern extends to the others.
 
 > **Path: your own hub — skip this entire guide on the community hub.** Deploying a hub is
 > optional. The alternative is NRP's hosted service at
@@ -19,20 +21,20 @@ This guide deploys a single JupyterHub into your NRP Nautilus namespace via Helm
 > every time. It also culls a server ~1 hour after the browser disconnects and starts the home
 > directory at 5 GB (extendable on request). Deploy your own hub when you want a managed,
 > reproducible class environment. See the
-> [full comparison](../README.md#start-here-whose-hub-will-you-use).
+> [full comparison](../README.md#running-on-nrp).
 
 ## You do NOT need a hub per assignment
 
-A JupyterHub deployment is bound to **one** namespace, **one** hostname, **one** CILogon OAuth application, **one** culling policy, and **one** admin set. The three NIDS assignments differ only in their Python environment and their memory footprint — both of which are **per-profile** (and per-image) settings inside a single hub, not per-hub settings. Running three hubs would triple the CILogon registrations, callback URLs, and configs for no benefit. So: one hub, three profiles.
+A JupyterHub deployment is bound to **one** namespace, **one** hostname, **one** CILogon OAuth application, **one** culling policy, and **one** admin set. The NIDS modules differ only in their Python environment and their memory footprint — both of which are **per-profile** (and per-image) settings inside a single hub, not per-hub settings. Running a hub per module would multiply the CILogon registrations, callback URLs, and configs for no benefit. So: one hub, one profile per module.
 
-This pattern extends to additional NIDS assignments (e.g. `nids-asn-introduction`, a prerequisite of the BGP assignment) by adding profile entries.
+Add a module by adding a profile entry — `nids-asn-introduction` (ASN), a prerequisite of the BGP module, is the usual next one even though it also runs on a laptop.
 
 ## Prerequisites
 
 - Completed [Install kubectl](1_kubectl_install.md) — `kubectl` and the `kubelogin` plugin installed.
 - Completed [NRP & Namespace](2_nrp_namespace.md) **including its own-hub-only Steps 4–5** — you are **admin** of an active namespace, you have pinned your [`HUB_HOST`](2_nrp_namespace.md#step-4-your-hubs-hostname-hub_host), and you have a [registered CILogon OAuth application](2_nrp_namespace.md#step-5-register-a-cilogon-oauth-application) with its **client ID** and **client secret** to hand.
 - Completed [Configure kubectl](3_kubectl_config.md) — `kubectl` pointed at your namespace.
-- The published `nids-hub` image path, for `singleuser.image` below. The image is already built — you only need to [build it yourself](0_build_images.md) if you are changing it.
+- The `nids-hub` image path, for `singleuser.image` below — the registry reference your cluster pulls from. [Build and publish the image](0_build_images.md) if you do not already have one, or if you are changing it.
 - [Helm](https://helm.sh/docs/intro/install/) installed locally.
 
 > **Routing note.** NRP is migrating from Ingress to the Gateway API (HTTPRoute); during migration hosts may be exposed on ports **50080/50443** (e.g. `https://<HUB_HOST>.nrp-nautilus.io:50443`). Plain Ingress still works as a temporary path.
@@ -95,12 +97,12 @@ Dataset paths, provenance, and provisioning are **not** repeated here — they l
 assignments. What follows is only what bears on the hub itself.
 
 ### nids-bgp-control-plane (BGP)
-- **Libraries:** `pybgpkit-parser` (import as `pybgpkit_parser`), `pelicanfs`, `pytricia`, `pandas`, `matplotlib`. Pure Python — **no Spark**.
+- **Libraries:** `pybgpkit-parser` (import as `pybgpkit_parser`), `pelicanfs`, `py-radix`, `pandas`, `matplotlib`. Pure Python — **no Spark**.
 - **Data:** [routeviews-bgp-rib](../datasets/routeviews-bgp-rib/), [caida-as-customer-cone](../datasets/caida-as-customer-cone/), [caida-as2org](../datasets/caida-as2org/).
 - **Prerequisite assignment:** `nids-asn-introduction` (ASN) — reads the same two Ceph objects; add a profile for it the same way if you teach it.
 
 ### nids-telescope-traffic (TELESCOPE)
-- **Libraries:** `dpkt`, `pandas`, `pyarrow`, `pybgpkit-parser`, `pelicanfs`, `pytricia`, `geoip2`, `maxminddb`, `matplotlib`. No Spark.
+- **Libraries:** `dpkt`, `pandas`, `pyarrow`, `pybgpkit-parser`, `pelicanfs`, `py-radix`, `geoip2`, `maxminddb`, `matplotlib`. No Spark.
 - **Data:** [ucsd-nt-pcap-samples](../datasets/ucsd-nt-pcap-samples/), [maxmind-geolite2](../datasets/maxmind-geolite2/), [routeviews-bgp-rib](../datasets/routeviews-bgp-rib/) for origin-AS enrichment.
 - **Caveat:** highest memory profile; process each capture one at a time (don't hold both flow maps in memory at once).
 
@@ -116,6 +118,7 @@ The datasets split between the in-cluster object store and the public internet, 
 | Source | Used by | Reachability |
 |---|---|---|
 | `rook-ceph-rgw-nautiluss3.rook` (NRP Ceph RGW) | ASN, BGP, IRR, TELESCOPE | **In-cluster only** — resolvable from pods inside NRP. |
+| `publicdata.caida.org` (CAIDA as2org) | ASN, BGP | External egress, and required: `nids-setup.py data` stages as2org from the pinned public release on the hub as well as on a laptop, because the in-cluster object is undated and the two would otherwise disagree on the country figures. Confirm with `notebooks/check-datasets.ipynb` on the hub. |
 | `osdf-director.osg-htc.org` (OSDF / RouteViews) | BGP, TELESCOPE | External egress. |
 | `ftp.ripe.net` (RIPE RPKI ROAs) | IRR | External egress — the only assignment reaching this host. |
 | `object.openintel.nl` (OpenINTEL S3A) | DNS | External egress. |

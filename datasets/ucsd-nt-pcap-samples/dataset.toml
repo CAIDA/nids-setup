@@ -1,0 +1,33 @@
+schema = 1
+id = "ucsd-nt-pcap-samples"
+name = "UCSD Network Telescope PCAP samples"
+used_by = ["TELESCOPE"]
+produced_by = "caida"
+public = false              # anonymized derivatives prepared for the assignment
+public_access = false       # anonymized derivatives prepared for the assignment; never published
+served_from = "ceph-only"
+setup = "undocumented"      # ❌
+time_sensitive = "yes"
+credentials = []
+
+[access]
+transport = "ceph"
+host = "http://rook-ceph-rgw-nautiluss3.rook"
+# The directory serial is MMYYYY, NOT YYYYMM -- sample_062026 is June 2026. This reads
+# backwards from every other dated path here. The filename component is a Unix epoch.
+template = "caida/ucsd-nt/sample_{sample}/ucsd-nt-sub.{epoch}.anon.pcap.gz"
+pins = ["sample", "epoch"]
+format = "gzip pcap, parsed with dpkt"
+# The two captures are 420 seconds apart; the surge appears in the second.
+epochs = ["1782463980", "1782464400"]
+
+[defaults]
+sample = "062026"
+epoch = "1782463980"
+
+[check]
+section = "ceph"
+order = 50
+label = "ceph: ucsd-nt pcap sample (TELESCOPE)"
+kind = "magic"
+magic = "1f8b"

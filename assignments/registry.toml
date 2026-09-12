@@ -1,0 +1,310 @@
+# NIDS assignment registry
+#
+# One block per assignment, keyed by the code published in assignments.json. Holds what
+# the setup tooling needs: which repos carry the assignment and its answer key, what its
+# environment is, and -- crucially -- which pins it supplies for each dataset it reads.
+#
+# Assignments pin *placeholders*, never URLs. The path shape lives once, in
+# datasets/<id>/dataset.toml; an assignment says only "period = 2026.05". That is what
+# makes drift visible: BGP and TELESCOPE read the same RouteViews dataset at two
+# different months, and here that is two `period` values on one dataset rather than two
+# unrelated strings in two repos.
+#
+# Every pin below was read out of the values tables in datasets/<id>/README.md, which
+# cite the notebook and line they came from.
+#
+# A repo may override its own block with a `nids.toml` at its root; see docs.
+# Loader: scripts/nids_registry.py
+#
+# -- `venue`: where a module is supported --------------------------------------
+#
+# Three venues, and a module names the ones it is supported on:
+#
+#   "local"    a student's own machine. ASN and BGP, and no others are planned.
+#   "nrp"      the NRP JupyterHub. The venue for the rest of the collection.
+#   "expanse"  SDSC Expanse under Slurm -- UCSDNT only, and a different machine
+#              rather than a larger one.
+#
+# A module qualifies for "local" on two conditions and only these two: its environment
+# builds from wheels with no host prerequisite the tooling can not install, and every
+# dataset it reads is publicly downloadable. `validate()` enforces the second half, so a
+# module can not claim local and quietly depend on Ceph or on a credential. ASN and BGP
+# meet both; nothing else in the collection does, because the constraint is where the
+# data lives rather than how much compute the notebook wants.
+#
+# The default is ["nrp"], so a block that says nothing about venue is a hub module.
+#
+# This is a statement about what is *supported*, not about what is possible. A hub module
+# may well run on a laptop that happens to have the right host prerequisite -- `setup
+# --local` says so and proceeds rather than refusing. Do not write "only runs on NRP"
+# anywhere unless someone has actually measured it.
+
+schema = 1
+
+# --- ASN ----------------------------------------------------------------------
+[ASN]
+name = "ASN Introduction"
+repo = "nids-asn-introduction"
+key_repo = "nids-asn-introduction-key"
+release = "r1"
+venue = ["local", "nrp"]    # both datasets are on publicdata.caida.org and the notebook is
+                            # pure standard library, so this is the least demanding module in
+                            # the collection. Run end to end on a laptop on Linux, macOS and
+                            # Windows.
+status = "active"
+check = "00-environment-check.ipynb"   # the name Brad's convention uses. No such file exists
+                            # in nids-asn-introduction-key yet; `verify` says so and runs the
+                            # key notebook instead, so a missing check does not block a release.
+
+[ASN.environment]
+# The standard library plus IPython, which comes from env/base.txt -- this module installs
+# nothing of its own and has no %pip line.
+extra = []
+
+[[ASN.datasets]]
+id = "caida-as-customer-cone"
+serial = "20260501"
+
+[[ASN.datasets]]
+id = "caida-as2org"
+
+# --- BGP ----------------------------------------------------------------------
+[BGP]
+name = "BGP Control Plane"
+repo = "nids-bgp-control-plane"
+key_repo = "nids-bgp-control-plane-key"
+release = "r1"
+venue = ["local", "nrp"]    # two publicdata datasets plus RouteViews over OSDF, all reachable
+                            # from the open internet, and every dependency ships a wheel. Run
+                            # end to end on a laptop on Linux, macOS and Windows.
+status = "active"
+check = "00-environment-check.ipynb"   # the name Brad's convention uses. No such file exists
+                            # in nids-bgp-control-plane-key yet; `verify` says so and runs the
+                            # key notebook instead, so a missing check does not block a release.
+profile = true
+# A hub spawner sizing, not a measurement -- nobody has profiled this notebook's peak yet.
+memory = { guarantee = "4Gi", limit = "8Gi", verified = false }
+
+[BGP.environment]
+# From the notebook's own %pip line.
+extra = ["pybgpkit-parser", "pelicanfs", "py-radix", "pandas", "matplotlib"]
+
+[[BGP.datasets]]
+id = "routeviews-bgp-rib"
+collector = "route-views3"
+period = "2026.05"          # BGP and TELESCOPE differ here -- see the note at the top
+
+[[BGP.datasets]]
+id = "caida-as-customer-cone"
+serial = "20260501"
+
+[[BGP.datasets]]
+id = "caida-as2org"
+
+# --- IRR ----------------------------------------------------------------------
+[IRR]
+name = "Registries: WHOIS, IRR & RPKI"
+repo = "nids-irr-rpki-whois"
+key_repo = "nids-irr-rpki-whois-key"
+# The assignments page links nids-irr-rpki-whois-local; the two are variants of the same
+# assignment, not a mistake. datasets/README.md carries the note.
+variants = ["nids-irr-rpki-whois-local"]
+release = "later"           # held back on reproducibility rather than on access: the ARIN and
+                            # APNIC dumps download anonymously, but the notebook pins 2023
+                            # snapshots and no IRR publishes an archive of its dumps, so nobody
+                            # can re-fetch what the assignment was written against.
+venue = ["nrp"]             # the pinned 2023 snapshot is re-fetchable from nowhere, so the
+                            # in-cluster copy is the only stable one
+status = "active"
+check = "00-environment-check.ipynb"
+
+[IRR.environment]
+# py-radix and tqdm are imported by the notebook. Both are in image/requirements.txt too --
+# the image is this module's environment, so the two must agree.
+extra = ["py-radix", "tqdm"]
+
+[[IRR.datasets]]
+id = "caida-irr-whois-dumps"
+snapshot = "2023-03-01"     # the reachability probe; the notebook walks Jan-Jun 2023
+source = "radb"
+
+[[IRR.datasets]]
+id = "routeviews-prefix2as"
+year = "2023"
+month = "03"
+date = "20230301"
+
+[[IRR.datasets]]
+id = "ripe-rpki-roas"
+ta = "afrinic"              # probe only; the notebook reads all five trust anchors
+year = "2023"
+month = "03"
+day = "01"
+
+# --- ITDK ---------------------------------------------------------------------
+[ITDK]
+name = "ITDK"
+repo = "nids-itdk"
+key_repo = "nids-itdk-key"
+release = "later"           # reads a built Postgres database that is neither published nor
+                            # deployed anywhere yet
+venue = ["nrp"]             # the database is an in-namespace deployment by construction
+status = "blocked"          # no Postgres instance exists anywhere yet
+blocked_on = "an in-namespace Postgres deployment"
+check = "00-environment-check.ipynb"
+
+[ITDK.environment]
+# From the notebook's imports. All five are in image/requirements.txt (python-dotenv arrives
+# there via the IYP block).
+extra = ["sqlalchemy", "psycopg2-binary", "pycountry", "scipy", "python-dotenv"]
+
+[ITDK.environment.key]
+# The key repo additionally *builds* the database (nids-itdk-build-db.ipynb), which the
+# student repo never does. Whether the builder needs anything beyond the list above is
+# untested -- the notebook has never been run against a live database.
+extra = []
+
+[[ITDK.datasets]]
+id = "itdk-postgres"
+
+# --- DNS ----------------------------------------------------------------------
+[DNS]
+name = "DNS Ecosystem"
+repo = "nids-dns-ecosystem"
+key_repo = "nids-dns-ecosystem-key"
+release = "later"           # r1 is the two modules a student can try unaided, and this is not
+                            # one of them. Nothing about the module is blocked -- its data is
+                            # public and it is ready to teach -- but it needs a hub, so it
+                            # ships with the hub-bound group rather than with the sampler.
+venue = ["nrp"]             # the data is public -- anonymous OpenINTEL S3 and a plain HTTPS
+                            # parquet -- but the queries run under Spark, which wants a JDK 17+
+                            # (plus winutils.exe and HADOOP_HOME on Windows) and `env` can not
+                            # install any of that. A laptop that already has a JDK will very
+                            # likely work; that is best-effort rather than a supported path.
+status = "active"
+check = "00-environment-check.ipynb"
+profile = true
+# A hub spawner sizing, not a measurement -- nobody has profiled this notebook's peak yet.
+memory = { guarantee = "8Gi", limit = "12Gi", verified = false }
+spark = true                # the only assignment using Spark
+
+[DNS.environment]
+# From the notebook's %pip line and imports. Spark is listed explicitly: the image supplies it
+# on the NRP hub, but this list describes the module rather than the hub.
+extra = ["pyspark", "tldextract", "dnspython", "matplotlib", "numpy", "requests"]
+
+[[DNS.datasets]]
+id = "openintel-fdns"
+source = "se"               # the graded source; the probe uses source=gov
+year = "2024"
+month = "01"
+day = "15"
+
+[[DNS.datasets]]
+id = "anycast-census"
+
+# --- TELESCOPE ----------------------------------------------------------------
+[TELESCOPE]
+name = "Network Telescope Traffic"
+repo = "nids-telescope-traffic"
+key_repo = "nids-telescope-traffic-key"
+release = "later"           # the pcap samples are unpublished, and MaxMind GeoLite2 is gated
+                            # behind an account and geo-restricted. Both are data-publication
+                            # questions rather than compute ones.
+venue = ["nrp"]
+status = "active"
+check = "00-environment-check.ipynb"
+profile = true
+# Read from the assignment's own README, which requires >=16 GB and recommends 24. The one
+# memory envelope here that is measured rather than estimated.
+memory = { guarantee = "16Gi", limit = "24Gi", verified = true }
+
+[TELESCOPE.environment]
+requirements = "requirements.txt"   # this repo pins its own
+extra = []
+
+[[TELESCOPE.datasets]]
+id = "ucsd-nt-pcap-samples"
+sample = "062026"           # MMYYYY, not YYYYMM -- June 2026
+epoch = "1782463980"        # the assignment reads both captures; this is the first
+
+[[TELESCOPE.datasets]]
+id = "maxmind-geolite2"
+build_date = "2026-06-24"
+
+[[TELESCOPE.datasets]]
+id = "routeviews-bgp-rib"
+collector = "route-views3"
+period = "2026.06"          # one month ahead of BGP's pin -- the drift, made visible
+
+# --- IYP ----------------------------------------------------------------------
+[IYP]
+name = "Internet Yellow Pages"
+repo = "nids-iyp"
+key_repo = "nids-iyp-key"
+release = "later"           # the public bolt endpoint iyp-bolt.ihr.live is unreachable from
+                            # everywhere, which no change of venue fixes. Returns to a shipping
+                            # release when IHR restores it, or if a Neo4j is stood up in the
+                            # namespace.
+venue = ["nrp"]
+status = "blocked"
+blocked_on = "a reachable Neo4j instance -- the public one is down, and the instructor path wants a self-hosted one"
+check = ""                  # this module ships no 00-environment-check.ipynb, which is a real
+                            # gap rather than an oversight in this file. `verify` reports it.
+
+[IYP.environment]
+# From the notebook's imports. python-dotenv is for the instructor path against a self-hosted
+# instance.
+extra = ["neo4j", "pandas", "python-dotenv"]
+
+[[IYP.datasets]]
+id = "iyp-neo4j"
+
+# --- UCSDNT -------------------------------------------------------------------
+[UCSDNT]
+name = "UCSD Network Telescope (Expanse)"
+repo = "nids-ucsdnt-expanse"
+key_repo = "nids-ucsdnt-expanse-key"
+release = "later"           # a credentialed bucket plus an SDSC Expanse allocation the
+                            # instructor obtains themselves
+venue = ["expanse"]         # SDSC Expanse under Slurm, not JupyterHub -- a different machine
+                            # rather than a larger one. The raw captures are AUA/DUA-governed
+                            # and never leave Expanse, so this will not move to the hub.
+status = "offsite"          # runs off the NRP hub entirely, so it needs no spawner profile
+check = ""                  # a check here would have to run under Slurm, so the convention
+                            # does not apply
+
+[UCSDNT.environment]
+# boto3 plus Spark, which comes from the Singularity image on Expanse. Read from the
+# notebook's imports; nothing here has been run against a live allocation.
+extra = ["boto3"]
+
+[[UCSDNT.datasets]]
+id = "ucsdnt-expanse-flowtuple"
+year = "2026"
+month = "02"
+day = "14"
+
+# --- not yet assessed ---------------------------------------------------------
+# Listed so `discover` reports them rather than silently ignoring a cloned repo.
+
+[GEOLOCATION]
+name = "Geolocation"
+repo = "nids-geolocation"
+key_repo = "nids-geolocation-key"
+release = "later"           # nids-geolocation does not exist on GitHub, only its key repo
+venue = ["nrp"]
+status = "stub"             # an outline, no code. Will need MaxMind GeoLite2 CSVs -- a
+                            # different artifact from the .mmdb TELESCOPE reads, so it
+                            # will get its own dataset directory, not an entry here.
+datasets = []
+
+[IPDATAPLANE]
+name = "IP Data Plane"
+repo = "nids-ip-data-plane"
+key_repo = "nids-ip-data-plane-key"
+release = "later"           # neither repo exists on GitHub. Delete this block once that is
+                            # confirmed to be intentional rather than a rename.
+venue = ["nrp"]
+status = "stub"             # empty
+datasets = []

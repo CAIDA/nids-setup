@@ -1,0 +1,58 @@
+schema = 1
+id = "caida-as-customer-cone"
+name = "CAIDA AS Customer Cone (ppdc-ases)"
+used_by = ["ASN", "BGP"]
+produced_by = "caida"
+public = true               # the same file is published openly; NIDS reads a Ceph copy
+public_access = true        # [verified 2026-08-27] publicdata serves the pinned serial, HTTP 200
+served_from = "ceph-only"
+setup = "undocumented"      # ❌ -- procedure not recoverable; see README.md
+time_sensitive = "yes"      # YYYYMMDD serial in the filename
+credentials = []
+
+[access]
+transport = "ceph"
+host = "http://rook-ceph-rgw-nautiluss3.rook"
+template = "caida/as-relationships/{serial}.ppdc-ases.txt.bz2"
+pins = ["serial"]
+format = "bzip2 text"
+
+# The open-web coordinate, and the one v1 resolves by default: v1 targets machines with
+# no NRP access, so this is the address that has to be right. The Ceph block above stays
+# recorded as the in-cluster mirror -- it is what the notebooks read today.
+#
+# [verified 2026-08-27] Upstream publishes `<YYYYMMDD>.ppdc-ases.txt.bz2` -- the same
+# filename the mirror uses, so the serial pin carries over unchanged. The pinned
+# 20260501 was confirmed present (HTTP 200) on that date.
+[access.public]
+transport = "https"
+base = "https://publicdata.caida.org/datasets/as-relationships/serial-1"
+template = "{serial}.ppdc-ases.txt.bz2"
+pins = ["serial"]
+format = "bzip2 text"
+verified = "2026-08-27"
+
+[defaults]
+serial = "20260501"
+
+# The in-cluster mirror check. Retained, but not run today -- nothing dispatches a second
+# check per dataset yet. Re-adding a hub-side mirror pass is Track B.
+# How `nids-setup.py data` puts this on disk. `filename` is what the notebook expects to
+# find in its own data/ directory, so a staged file makes the notebook's download a no-op.
+[stage]
+filename = "{serial}.ppdc-ases.txt.bz2"
+into = ["ASN", "BGP"]
+
+[check]
+section = "ceph"
+order = 10
+label = "ceph: customer cone (ASN, BGP)"
+kind = "magic"
+magic = "425a68"            # "BZh", hex-encoded so the TOML stays plain text
+
+[check.public]
+section = "external"
+order = 30
+label = "publicdata: customer cone (ASN, BGP)"
+kind = "http-magic"
+magic = "425a68"

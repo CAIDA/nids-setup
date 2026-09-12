@@ -16,3 +16,14 @@ z-*
 .claude/settings.local.json
 .DS_Store
 __pycache__/
+
+# The environment `nids-setup.py env` builds.
+.venv/
+
+# Generated requirements. requirements-local.txt is committed -- it is the reviewable
+# record of what a student's laptop installs, and the only environment `env` actually
+# builds, since on the hub the image supplies the packages. Ad-hoc subsets from
+# `env --assignment` are not committed.
+env/requirements-*.txt
+!env/requirements-local.txt
+!env/requirements-all.txt

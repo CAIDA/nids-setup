@@ -12,7 +12,7 @@ that a traffic surge is visible between them. Mirrored on in-cluster Ceph.
 - **Credentials:** none (for the anonymized samples)
 - **Time-sensitive:** Yes — the directory and both filenames encode fixed dates/epochs
 - **Licence / governance:** derived from AUA/DUA-governed data; the anonymized samples are served
-  openly from Ceph. **[unverified]** which terms apply to the derivatives.
+  openly from Ceph. **Not established:** which terms apply to the derivatives.
 
 ## Access
 
