@@ -39,12 +39,17 @@ pelicanfs>=1.0
 pybgpkit-parser>=0.18   # import as `import pybgpkit_parser as bgpkit` (NOT `import bgpkit`)
 
 # --- DNS ecosystem ---
-# OPEN ITEM: the all-spark-notebook base already ships Spark, and the PyPI `pyspark`
-# distribution is source-only and large, so pip builds and installs a second copy over
-# it. That costs build time and image size, and risks a version skew against $SPARK_HOME
-# and the pre-staged hadoop-aws JAR. Likely wants removing or pinning to the base's
-# Spark version — needs a real Spark session against the DNS notebook to confirm first.
-pyspark
+# pyspark is deliberately NOT listed: the all-spark-notebook base already ships Spark at
+# $SPARK_HOME, and the base puts $SPARK_HOME/python on PYTHONPATH, so `import pyspark`
+# always resolves there. Listing it here had no runtime effect at all -- during the build
+# PYTHONPATH is not yet set, so pip could not see the base's copy and installed a second
+# one (a 450 MB source build, 483 MB on disk) into site-packages, which nothing ever
+# imported. Measured 2026-09-14 inside the built image; in a running container the DNS
+# notebook's own `%pip install pyspark` reports "already satisfied in
+# /usr/local/spark/python (4.2.0)".
+#
+# The base's Spark version is whatever the pinned base digest ships (4.2.0 as of the
+# 2026-07-29 digest). Bumping the base is what changes it.
 tldextract
 dnspython               # import as `import dns.resolver`
 numpy
