@@ -46,8 +46,10 @@ what failed.
 **Community hub.** Log in at
 [jupyterhub-west.nrp-nautilus.io](https://jupyterhub-west.nrp-nautilus.io) and pick an instance
 sized for the assignment you are checking — the assignment's README gives the number, and the
-telescope assignment's **≥ 16 GB** is the one you cannot get wrong. Then go to Step 2; the rest of
-this step is own-hub only.
+telescope assignment's **≥ 16 GB** is the one you cannot get wrong. **Pick the image as
+deliberately as the size:** the preset has no Java, so the DNS assignment needs the **`Pyspark`**
+image and fails without it. Every other assignment runs on the preset. Then go to Step 2; the rest
+of this step is own-hub only.
 
 **Your own hub.** Visit `https://<HUB_HOST>.nrp-nautilus.io` — e.g. `https://caida-nids-jhub.nrp-nautilus.io`.
 `HUB_HOST` is the subdomain you claimed in
@@ -115,9 +117,18 @@ JupyterHub is ready
 
 **On the community hub**, expect the same block above the divider — including
 `in-cluster ceph gateway`, which passes because the server is still running inside NRP — and expect
-the two rows below it to come back as **warnings** rather than `[ ok ]`: the stock image has no
-pre-staged jars and no JVM. That only matters for the DNS assignment, and only as slower Spark
-startup (the jars are then fetched from Maven Central). Everything else failing is a real failure.
+the two rows below it to come back as **warnings** rather than `[ ok ]`: the image you spawned has
+no pre-staged jars, and unless it is a Spark image it has no JVM either. Both rows matter only for
+the DNS assignment, but they do not mean the same thing:
+
+- **No pre-staged jars** is cosmetic. Spark fetches them from Maven Central at session start, which
+  is slower on the first run and otherwise identical.
+- **No JVM is fatal.** DNS does not start at all — it fails at its first Spark cell with
+  `JAVA_HOME is not set`, then `[JAVA_GATEWAY_EXITED]`. The image is chosen at spawn and cannot be
+  changed from inside a running server, so the fix is to stop the server and spawn a new one with
+  the **`Pyspark`** image. The default preset image has no JVM.
+
+Everything else failing is a real failure.
 
 ## Step 4: What each failure means
 
@@ -136,7 +147,7 @@ did not finish. The egress and Ceph rows apply on both.
 | `in-cluster ceph gateway` — did not resolve | You are not running inside NRP. `rook-ceph-rgw-nautiluss3.rook` resolves only from pods in the cluster. | Run the notebook on the hub, not on your laptop |
 | `in-cluster ceph gateway` — resolved but non-2xx | The gateway is up but the object moved, or a NetworkPolicy blocks the namespace. | [Data access and egress](4_nrp_jupyterhub.md#data-access-and-egress) |
 | `pre-staged spark s3a jars` (warning) | Not the `nids-hub` image — expected on the hosted NRP hub. Spark will then pull the jars from Maven Central at session start, which needs egress. | the two `curl` fetches in [image/Dockerfile](../image/Dockerfile) |
-| `spark session (local[*])` (warning) | No JVM, i.e. not a Spark-capable base image. Only the DNS assignment needs it. | [image/Dockerfile](../image/Dockerfile) |
+| `spark session (local[*])` (warning) | No JVM, i.e. not a Spark-capable base image. Only the DNS assignment needs it — but for DNS it is fatal, not a warning: respawn with the `Pyspark` image. | [image/Dockerfile](../image/Dockerfile) |
 
 Two failures happen *before* the notebook can run at all, so you will see them in `kubectl`, not in
 the output above: `ImagePullBackOff` (image not pullable — a private registry with no pull secret)

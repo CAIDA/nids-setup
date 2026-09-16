@@ -145,8 +145,15 @@ python scripts/nids-setup.py verify --venue local
 
 `verify` goes further and executes each module's answer-key notebook, printing one line per module:
 which are ready to hand out, and what failed on the ones that are not. It needs the `-key`
-repositories, which are private, so it is an instructor-side command; a module whose key is not
-cloned is reported as unverified rather than failed. Nothing is written back to the key repos.
+repositories, so it is an instructor-side command; a module whose key is not cloned is reported as
+unverified rather than failed. Nothing is written back to the key repos.
+
+**The `-key` repositories are private, and access is granted per instructor.** Request it with the
+[NIDS module access request form](https://www.caida.org/projects/nids/access-request/), naming the
+modules you plan to teach; `clone` and `verify` report a key you cannot read as skipped rather than
+failing. Until then every other command works — only `verify` and `prep`'s key-vs-student check
+need them. The public module repositories deliberately contain no reference to the keys, and
+keeping it that way is part of handing a module out.
 
 **If you are teaching anything past ASN and BGP, start the access conversation early.** An NRP
 namespace has to be requested and approved, and an Expanse allocation is a separate process again.
@@ -161,7 +168,9 @@ start.
 
 **The community hub** — NRP's hosted service at
 [jupyterhub-west.nrp-nautilus.io](https://jupyterhub-west.nrp-nautilus.io). Log in with CILogon,
-pick an instance size, go. Nothing to deploy and nothing to maintain.
+pick an image and an instance size, go. Nothing to deploy and nothing to maintain. **The image is a
+real choice, not a default to skip:** the preset has no Java, so DNS needs the `Pyspark` image and
+fails at its first Spark cell without it. Every other module runs on the preset.
 
 **Your own hub** — a JupyterHub you deploy into your own NRP namespace with Helm, running the
 `nids-hub` image with one spawner profile per module.
@@ -170,7 +179,7 @@ pick an instance size, go. Nothing to deploy and nothing to maintain.
 | ------------------ | ------------------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
 | Setup effort       | Log in                                                                          | Namespace admin, a CILogon OAuth app, a Helm release you own                   |
 | Environment        | NRP's stock images — each module `%pip install`s its own deps, taking minutes    | The pinned `nids-hub` image with every module's deps already installed         |
-| Spark (DNS module) | No JVM; Spark pulls its S3A jars from Maven Central at session start             | Spark-capable image with the S3A jars pre-staged                               |
+| Spark (DNS module) | **Select the `Pyspark` image at spawn** — the default preset has no JVM and DNS will not start. Spark then pulls its S3A jars from Maven Central at session start | Spark-capable image with the S3A jars pre-staged                               |
 | Memory             | You pick an instance size per module, by hand, every time                       | One right-sized spawner profile per module                                     |
 | Home directory     | Starts at 5 GB (extendable on request)                                          | Whatever you set in `singleuser.storage`                                       |
 | Idle culling       | ~1 hour after the browser disconnects, fixed                                    | Yours to set (NRP requires `timeout` ≤ 6 h)                                    |

@@ -261,6 +261,40 @@ def jvm_modules(assignments, codes):
                     for pkg in a.env_for("assignment").get("extra", []))]
 
 
+def report_missing_jvm(assignments, codes, selected, on_hub=False, unaffected="Unaffected"):
+    """Warn when the selection needs a JVM and there is none here. True if it warned.
+
+    Reported for the whole selection, before anything is built or opened: it is a property
+    of what was asked for, and the other modules in the same selection still work without
+    it. The remediation differs by venue, which is the whole reason this is shared -- on a
+    laptop you install a JDK, but on the hub the image is chosen at spawn, before this
+    script exists, so nothing it can do will fix the server it is already running on.
+    """
+    needs_jvm = jvm_modules(assignments, codes)
+    if not needs_jvm or java_runtime():
+        return False
+    where = "this server" if on_hub else "this machine"
+    print(f"  [warn] {', '.join(needs_jvm)} needs a Java runtime and {where} has none --")
+    print(f"         no `java` on PATH, no JAVA_HOME. `{JVM_PACKAGE}` is a wrapper "
+          "around a JVM,")
+    print("         so the notebook fails at its first Spark cell with "
+          "`JAVA_HOME is not set`.")
+    if on_hub:
+        print("         The image is chosen when you spawn the server, so this script "
+              "cannot change it:")
+        print("         stop this server, spawn a new one with the `Pyspark` image, and "
+              "re-run this.")
+    else:
+        print("         Install a JDK (17 or newer), or run that module on NRP's "
+              "JupyterHub with")
+        print("         the `Pyspark` image selected at spawn -- the default preset "
+              "image has no JVM.")
+    others = [c for c in selected if c not in needs_jvm]
+    if others:
+        print(f"         {unaffected}: {', '.join(others)}.")
+    return True
+
+
 def activate_hint(target):
     """The line a user types to activate `target`, in their platform's shell."""
     if os.name == "nt":
@@ -329,20 +363,8 @@ def cmd_env(args):
     print(f"modules:      {', '.join(selected)}")
     print(f"requirements: {req_path.name} ({len(packages)} packages)")
 
-    # Reported for the whole selection, before anything is built: it is a property of what
-    # was asked for, and the other modules in the same selection still work without it.
-    needs_jvm = jvm_modules(assignments, codes)
-    if needs_jvm and not java_runtime():
-        others = [c for c in selected if c not in needs_jvm]
-        print(f"  [warn] {', '.join(needs_jvm)} needs a Java runtime and this machine has "
-              "none --")
-        print(f"         no `java` on PATH, no JAVA_HOME. `{JVM_PACKAGE}` is a wrapper "
-              "around a JVM,")
-        print("         so pip installs it but the notebook fails at run time. Install a "
-              "JDK (17 or")
-        print("         newer), or run that module on NRP's JupyterHub, which has one.")
-        if others:
-            print(f"         Unaffected, and still built by this run: {', '.join(others)}.")
+    report_missing_jvm(assignments, codes, selected,
+                       unaffected="Unaffected, and still built by this run")
 
     if args.dry_run:
         print("\n" + text)
@@ -962,6 +984,17 @@ def cmd_setup(args):
     venv = nids_registry.repo_root() / ".venv"
     if skip_env:
         print(env_note)
+        # The env step is where a missing JVM is normally caught, and --nrp skips it --
+        # which is exactly where it matters, because the hub's default preset image has no
+        # Java and only the `Pyspark` image does. Skipping the build must not skip the check.
+        if args.mode == "nrp":
+            hub_assignments = nids_registry.load_assignments(
+                release=sel.release, venue=sel.venue)
+            hub_codes = set(modules) if modules else None
+            report_missing_jvm(
+                hub_assignments, hub_codes,
+                [c for c in hub_assignments if not hub_codes or c in hub_codes],
+                on_hub=True)
     else:
         env_args = argparse.Namespace(
             root=getattr(args, "root", None), release=sel.release, venue=sel.venue,
