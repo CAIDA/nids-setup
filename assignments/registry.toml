@@ -146,11 +146,11 @@ day = "01"
 name = "ITDK"
 repo = "nids-itdk"
 key_repo = "nids-itdk-key"
-release = "later"           # reads a built Postgres database that is neither published nor
-                            # deployed anywhere yet
+release = "later"           # reads a Postgres database each instructor builds (nids-itdk-key
+                            # README); the pinned ITDK-2026-03 release is not yet public
 venue = ["nrp"]             # the database is an in-namespace deployment by construction
-status = "blocked"          # no Postgres instance exists anywhere yet
-blocked_on = "an in-namespace Postgres deployment"
+status = "blocked"
+blocked_on = "ITDK-2026-03 is not in the public ITDK archive, so instructors cannot build the pinned database"
 check = "00-environment-check.ipynb"
 
 [ITDK.environment]
