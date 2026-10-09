@@ -1174,8 +1174,8 @@ def prep_venue(assignment):
     if assignment.runs_local:
         lines.append(f"[ ok ] venue: {venue} -- students can run this on their own machines")
     elif "expanse" in assignment.venue:
-        lines.append(f"[ ok ] venue: {venue} -- runs under Slurm on SDSC Expanse, not on the "
-                     f"hub; students need their own allocation")
+        lines.append(f"[ ok ] venue: {venue} -- runs on SDSC Expanse, not on the hub; "
+                     f"students need an Expanse allocation")
     else:
         lines.append(f"[ ok ] venue: {venue} -- students need access to that venue; the "
                      f"laptop path is untested and unsupported")
