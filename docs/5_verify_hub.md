@@ -21,17 +21,16 @@ Two notebooks do the checking, and both are for you, not for students:
 | Notebook | Where | Answers |
 |---|---|---|
 | [notebooks/test.ipynb](../notebooks/test.ipynb) | this repo | Is the **hub** sound? Run once per spawner profile, after every deploy. |
-| `00-environment-check.ipynb` | each **answer-key** repo | Are **that assignment's** datasets and libraries reachable? Run before handing the assignment out. |
+| the key notebook | each **answer-key** repo | Does **that assignment** run end to end here? Run before handing it out. |
 
-Each ends in one line — `JupyterHub is ready` (or `... ready for nids-<assignment>`), or a list of
-what failed.
+`test.ipynb` ends in one line — `JupyterHub is ready`, or a list of what failed.
 
 ## Prerequisites
 
 **Community hub**
 
-- An active NRP namespace from [NRP & Namespace](2_nrp_namespace.md) Steps 1–3, and a CILogon login
-  that reaches [jupyterhub-west.nrp-nautilus.io](https://jupyterhub-west.nrp-nautilus.io).
+- An active NRP namespace from [NRP & Namespace](2_nrp_namespace.md) Steps 1–3, and an account
+  that can sign in at [jupyterhub-west.nrp-nautilus.io](https://jupyterhub-west.nrp-nautilus.io).
 
 **Your own hub**
 
@@ -45,10 +44,9 @@ what failed.
 
 **Community hub.** Log in at
 [jupyterhub-west.nrp-nautilus.io](https://jupyterhub-west.nrp-nautilus.io) and pick an instance
-sized for the assignment you are checking — the assignment's README gives the number, and the
-telescope assignment's **≥ 16 GB** is the one you cannot get wrong. **Pick the image as
-deliberately as the size:** the preset has no Java, so the DNS assignment needs the **`Pyspark`**
-image and fails without it. Every other assignment runs on the preset. Then go to Step 2; the rest
+sized for the assignment you are checking — the assignment's README gives the number. **Pick the
+image as deliberately as the size:** the default image has no Java, so the DNS assignment needs the
+**`Pyspark`** image and fails without it. Every other assignment runs on the default image. Then go to Step 2; the rest
 of this step is own-hub only.
 
 **Your own hub.** Visit `https://<HUB_HOST>.nrp-nautilus.io` — e.g. `https://caida-nids-jhub.nrp-nautilus.io`.
@@ -126,7 +124,7 @@ the DNS assignment, but they do not mean the same thing:
 - **No JVM is fatal.** DNS does not start at all — it fails at its first Spark cell with
   `JAVA_HOME is not set`, then `[JAVA_GATEWAY_EXITED]`. The image is chosen at spawn and cannot be
   changed from inside a running server, so the fix is to stop the server and spawn a new one with
-  the **`Pyspark`** image. The default preset image has no JVM.
+  the **`Pyspark`** image. The default image has no JVM.
 
 Everything else failing is a real failure.
 
@@ -169,27 +167,27 @@ against a real pod rather than against the value you typed into `values.yaml`.
 **Both paths, if you are handing an assignment to students** — the datasets and the egress they need
 are the same either way, and the community hub gives you no other way to find out.
 
-Before releasing an assignment, run its check on the profile (or, on the community hub, the instance
-size) that assignment will use. Clone the
-answer-key repo into the hub (the clone URLs are the *answer key* links in the ETP overview README)
-and run its `00-environment-check.ipynb`:
+Before releasing an assignment, run its key notebook top to bottom on the image and memory that
+assignment will use. The key repos are private: `git clone` asks for your GitHub username and a
+[personal access token](https://github.com/settings/tokens) (scope `repo`) as the password.
 
 ```bash
 git clone https://github.com/CAIDA/nids-dns-ecosystem-key.git
 ```
 
-| Answer-key repo | Profile to run it on | What it actually touches | Time |
-|---|---|---|---|
-| `nids-asn-introduction-key` | BGP | Ceph: `as2org.jsonl` parses, `ppdc-ases` is a bz2 stream. Standard library only — no `%pip`. | seconds |
-| `nids-bgp-control-plane-key` | BGP | OSDF RIB *listing* for `route-views3`, plus the two Ceph objects above. No RIB is parsed. | seconds |
-| `nids-irr-rpki-whois-key` | BGP | Ceph IRR dump + RouteViews prefix2as, and a HEAD against **`ftp.ripe.net`** — the only assignment that reads from RIPE. | seconds |
-| `nids-itdk-key` | BGP | Your **Postgres** instance: credentials resolve, `SELECT 1`, the four `caida_itdk` tables exist, one row reads. Needs `db_credentials.env` uploaded next to the notebook. | seconds |
-| `nids-dns-ecosystem-key` | DNS (Spark) | Starts Spark with the assignment's exact S3A config, reads one OpenINTEL partition's Parquet **schema**, HEADs `manycast.net`, resolves a hostname via `dnspython`. | 2–5 min |
-| `nids-telescope-traffic-key` | Telescope (24 GB) | **Fails if memory < 16 GiB**, then the two Ceph PCAPs, the GeoLite2 database, and an OSDF RIB listing. | seconds |
+| Answer-key repo | Image / memory | Time on the community hub |
+|---|---|---|
+| `nids-asn-introduction-key` | default / 8 GB | seconds |
+| `nids-bgp-control-plane-key` | default / 8 GB | about 4 min |
+| `nids-irr-rpki-whois-key` | default / **16 GB** — it runs out of memory at 8 GB | about 17 min |
+| `nids-iyp-key` | default / 8 GB | under a minute |
+| `nids-dns-ecosystem-key` | **`Pyspark`** / 8 GB | about 15 min |
+| `nids-itdk-key` | needs a reachable Postgres and `db_credentials.env` next to the notebook | — |
 
-A green run there is the signal the assignment is ready to hand out. A red one tells you which
-host your namespace cannot reach — compare it against the egress table in
-[Deploy JupyterHub](4_nrp_jupyterhub.md#data-access-and-egress).
+A clean run whose outputs match the committed ones is the signal the assignment is ready to hand
+out. IYP queries a live graph, and DNS's anycast figures come from a live census, so those numbers
+move between runs. An error naming a host means your server cannot reach it — compare against the
+egress table in [Deploy JupyterHub](4_nrp_jupyterhub.md#data-access-and-egress).
 
 ## Troubleshooting
 
@@ -197,7 +195,7 @@ host your namespace cannot reach — compare it against the egress table in
   as `pybgpkit_parser`. Not a hub problem.
 - **DNS check: S3A read fails** — confirm `fs.s3a.vectored.io.enabled` and
   `parquet.hadoop.vectored.io.enabled` are both `false`. Enabling them against this object store
-  breaks reads; the check notebook sets them correctly, so a failure here means something else
+  breaks reads; the notebook sets them correctly, so a failure here means something else
   changed them.
 - **DNS check: Spark hangs at session start** — `spark.jars.packages` resolves through Ivy on first
   run and needs Maven Central. The pre-staged jars in `$SPARK_HOME/jars` do not skip that

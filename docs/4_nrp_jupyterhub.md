@@ -6,7 +6,7 @@
 
 This guide deploys a single JupyterHub into your NRP Nautilus namespace via Helm, with **one spawner profile per NIDS module**. It is aimed at the instructor/admin standing up a managed course environment.
 
-The hub is where most of the collection runs: every module except ASN and BGP, which also run on a student's laptop, and UCSDNT, which runs on SDSC Expanse instead. The profiles below cover the modules that have been sized so far — BGP control plane, telescope traffic, DNS ecosystem — and the pattern extends to the others.
+The hub is where most of the collection runs: every module except the two telescope modules, TELESCOPE and UCSDNT, which run on SDSC Expanse instead. ASN and BGP also run on a student's laptop. The profiles below cover the modules that have been sized so far — BGP control plane and DNS ecosystem — and the pattern extends to the others.
 
 > **Path: your own hub — skip this entire guide on the community hub.** Deploying a hub is
 > optional. The alternative is NRP's hosted service at
@@ -87,7 +87,6 @@ All profiles share the one image and differ only by display name and memory enve
 | Profile | Memory (guarantee / limit) | Spark? | Notes |
 |---|---|---|---|
 | NIDS - BGP Control Plane | 4Gi / 8Gi `*` | No | Holds a full RouteViews RIB prefix→ASN map + customer-cone maps in RAM. |
-| NIDS - Telescope Traffic | 16Gi / 24Gi | No | **Authoritative:** the assignment requires ≥ 16 GB (24 GB recommended). |
 | NIDS - DNS Ecosystem | 8Gi / 12Gi `*` | Yes (`local[*]`) | Spark driver 4G + executor 4G; size the pod above their sum with headroom. |
 
 ## Per-assignment notes
@@ -101,11 +100,6 @@ assignments. What follows is only what bears on the hub itself.
 - **Data:** [routeviews-bgp-rib](../datasets/routeviews-bgp-rib/), [caida-as-customer-cone](../datasets/caida-as-customer-cone/), [caida-as2org](../datasets/caida-as2org/).
 - **Prerequisite assignment:** `nids-asn-introduction` (ASN) — reads the same two Ceph objects; add a profile for it the same way if you teach it.
 
-### nids-telescope-traffic (TELESCOPE)
-- **Libraries:** `dpkt`, `pandas`, `pyarrow`, `pybgpkit-parser`, `pelicanfs`, `py-radix`, `geoip2`, `maxminddb`, `matplotlib`. No Spark.
-- **Data:** [ucsd-nt-pcap-samples](../datasets/ucsd-nt-pcap-samples/), [maxmind-geolite2](../datasets/maxmind-geolite2/), [routeviews-bgp-rib](../datasets/routeviews-bgp-rib/) for origin-AS enrichment.
-- **Caveat:** highest memory profile; process each capture one at a time (don't hold both flow maps in memory at once).
-
 ### nids-dns-ecosystem (DNS)
 - **Libraries:** `pyspark`, `tldextract`, `dnspython` (import as `dns.resolver`), `numpy`, `requests`, `matplotlib`. Spark runs in **local mode** — no standalone/operator Spark cluster.
 - **Data:** [openintel-fdns](../datasets/openintel-fdns/), [anycast-census](../datasets/anycast-census/).
@@ -117,9 +111,9 @@ The datasets split between the in-cluster object store and the public internet, 
 
 | Source | Used by | Reachability |
 |---|---|---|
-| `rook-ceph-rgw-nautiluss3.rook` (NRP Ceph RGW) | ASN, BGP, IRR, TELESCOPE | **In-cluster only** — resolvable from pods inside NRP. |
+| `rook-ceph-rgw-nautiluss3.rook` (NRP Ceph RGW) | ASN, BGP, IRR | **In-cluster only** — resolvable from pods inside NRP. |
 | `publicdata.caida.org` (CAIDA as2org) | ASN, BGP | External egress, and required: `nids-setup.py data` stages as2org from the pinned public release on the hub as well as on a laptop, because the in-cluster object is undated and the two would otherwise disagree on the country figures. Confirm with `notebooks/check-datasets.ipynb` on the hub. |
-| `osdf-director.osg-htc.org` (OSDF / RouteViews) | BGP, TELESCOPE | External egress. |
+| `osdf-director.osg-htc.org` (OSDF / RouteViews) | BGP | External egress. |
 | `ftp.ripe.net` (RIPE RPKI ROAs) | IRR | External egress — the only assignment reaching this host. |
 | `object.openintel.nl` (OpenINTEL S3A) | DNS | External egress. |
 | `manycast.net` | DNS | External egress. |
@@ -138,7 +132,7 @@ These are **required** by NRP — a deployment missing them can get your namespa
 
 ## Shared storage
 
-To hand the same fixed datasets to a whole class, attach a PVC via `singleuser.storage.extraVolumes` / `extraVolumeMounts` (e.g. mounted read-only at `/home/shared`). Multi-pod use requires an access mode of **ReadOnlyMany** or **ReadWriteMany**; a read-only shared volume fits handing out immutable datasets (telescope PCAPs, cached OpenINTEL/RIB data). See the commented block in [configs/values.yaml](../configs/values.yaml).
+To hand the same fixed datasets to a whole class, attach a PVC via `singleuser.storage.extraVolumes` / `extraVolumeMounts` (e.g. mounted read-only at `/home/shared`). Multi-pod use requires an access mode of **ReadOnlyMany** or **ReadWriteMany**; a read-only shared volume fits handing out immutable datasets (cached OpenINTEL/RIB data). See the commented block in [configs/values.yaml](../configs/values.yaml).
 
 ## Operational good practice
 
@@ -147,14 +141,14 @@ To hand the same fixed datasets to a whole class, attach a PVC via `singleuser.s
 
 ## Before you go live (confirm)
 
-- **Right-size memory** for the BGP and DNS profiles against real runs (telescope's 16/24 Gi is authoritative; the others are estimates).
+- **Right-size memory** for the BGP and DNS profiles against real runs; both are estimates.
 - **Spark JARs:** confirm they are pre-staged in the image (they are — the two `curl` fetches in [image/Dockerfile](../image/Dockerfile)), or that NRP pod egress to Maven Central is permitted at Spark session start.
 - **Egress/reachability:** confirm the namespace can reach in-cluster `rook-ceph-rgw-nautiluss3.rook` and the external hosts (OSDF, `ftp.ripe.net`, `object.openintel.nl`, `manycast.net`, `iyp-bolt.ihr.live`). [notebooks/check-datasets.ipynb](../notebooks/check-datasets.ipynb) answers this in one run.
 - **Base image:** confirm the Spark-capable base carries a Python compatible with the pinned dependencies.
 
 ## Troubleshooting
 
-- **Pod stuck in `Pending`** — check `kubectl describe pod <pod> -n <YOUR_NAMESPACE>` for resource-quota or scheduling issues (the telescope profile needs a node that can satisfy 16–24 Gi).
+- **Pod stuck in `Pending`** — check `kubectl describe pod <pod> -n <YOUR_NAMESPACE>` for resource-quota or scheduling issues.
 - **OAuth callback mismatch** — ensure the callback URL registered with CILogon exactly matches your hub's hostname and path.
 - **DNS S3A read failures** — verify `fs.s3a.vectored.io.enabled` and `parquet.hadoop.vectored.io.enabled` are both `false`.
 - **Can't reach CAIDA data** — the `rook-ceph-rgw-nautiluss3.rook` endpoint only resolves inside the cluster; it won't work from a laptop. Run [notebooks/check-datasets.ipynb](../notebooks/check-datasets.ipynb) from inside a spawned server to see which datasets are actually reachable.

@@ -32,7 +32,7 @@ kubectl version --client
 NRP uses OIDC (CILogon) authentication, so the `kubelogin` plugin is **required**. On Linux/macOS:
 
 ```bash
-OS_ARCHITECTURE="$(uname -m)"
+OS_ARCHITECTURE="$(uname -m | sed -e s/x86_64/amd64/ -e s/aarch64/arm64/)"
 OS_NAME="$(uname -s | tr '[:upper:]' '[:lower:]')"
 KUBELOGIN_VERSION="$(curl -fsSL "https://api.github.com/repos/int128/kubelogin/releases/latest" | jq -r '.tag_name')"
 curl -o kubelogin.zip -fSL "https://github.com/int128/kubelogin/releases/download/${KUBELOGIN_VERSION}/kubelogin_${OS_NAME}_${OS_ARCHITECTURE}.zip"
@@ -41,7 +41,7 @@ chmod +x ./kubelogin
 sudo mv ./kubelogin /usr/local/bin/kubectl-oidc_login
 ```
 
-See the [kubelogin setup docs](https://github.com/int128/kubelogin?tab=readme-ov-file#setup) for other platforms and install methods.
+With Homebrew, `brew install int128/kubelogin/kubelogin` does the same. See the [kubelogin setup docs](https://github.com/int128/kubelogin?tab=readme-ov-file#setup) for other platforms and install methods.
 
 ## Next
 

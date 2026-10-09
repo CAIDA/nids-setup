@@ -155,7 +155,7 @@ The image also pre-stages the DNS assignment's Spark S3A JARs (`hadoop-aws:3.4.0
 startup — see [image/Dockerfile](../image/Dockerfile). The base image is pinned by digest rather than
 `:latest`, because a moving base invalidates the whole build cache.
 
-> Split the DNS/Spark image off from a plain BGP+telescope image **only** if the combined image
+> Split the DNS/Spark image off from a plain Python image **only** if the combined image
 > becomes unwieldy or a real version-pin conflict appears.
 
 ## Rebuilding and versioning
