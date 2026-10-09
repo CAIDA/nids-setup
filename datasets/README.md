@@ -32,7 +32,7 @@ Codes are the ones published in
 | IRR | Registries: WHOIS, IRR & RPKI | NRP |
 | ITDK | ITDK | NRP |
 | DNS | DNS Ecosystem | NRP |
-| TELESCOPE | Network Telescope Traffic | NRP |
+| TELESCOPE | Network Telescope Traffic | SDSC Expanse |
 | IYP | Internet Yellow Pages | NRP |
 | UCSDNT | UCSD Network Telescope | SDSC Expanse |
 

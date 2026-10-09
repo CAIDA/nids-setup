@@ -21,8 +21,8 @@ publishes openly, and every package they need installs from PyPI as a wheel. Not
 no account, no allocation — clone, run one command, open the notebook. They are the way in.
 
 **The rest of the collection runs on the [National Research Platform](https://nationalresearchplatform.org/)
-(NRP) JupyterHub**, and one — the UCSD Network Telescope module — runs on **SDSC Expanse** under
-Slurm. This is not about how much compute a notebook wants. It is about where the data is: a
+(NRP) JupyterHub**, and the two telescope modules run on **SDSC Expanse**, where the telescope data
+is held. This is not about how much compute a notebook wants. It is about where the data is: a
 database that has to be deployed, an archive of captures that is not published, a registry snapshot
 no longer re-fetchable from anywhere, a telescope feed governed by a data-use agreement. Moving the
 notebook to a bigger laptop does not move the data.
@@ -39,8 +39,8 @@ access the rest of them need.
 | [DNS Ecosystem](https://github.com/CAIDA/nids-dns-ecosystem) | `DNS` | NRP | Public data, but the queries run under Spark, which needs a JDK |
 | [Registries: WHOIS, IRR & RPKI](https://github.com/CAIDA/nids-irr-rpki-whois) | `IRR` | NRP | Pins 2023 snapshots, and no registry archives its dumps |
 | [ITDK](https://github.com/CAIDA/nids-itdk) | `ITDK` | NRP | Reads a Postgres database deployed in the namespace |
-| [Internet Yellow Pages](https://github.com/CAIDA/nids-iyp) | `IYP` | NRP | Needs a reachable Neo4j; the public endpoint is down |
-| [Network Telescope Traffic](https://github.com/CAIDA/nids-telescope-traffic) | `TELESCOPE` | NRP | Capture samples are unpublished; GeoLite2 is account-gated |
+| [Internet Yellow Pages](https://github.com/CAIDA/nids-iyp) | `IYP` | NRP | Queries IHR's public Neo4j endpoint, a live graph |
+| [Network Telescope Traffic](https://github.com/CAIDA/nids-telescope-traffic) | `TELESCOPE` | SDSC Expanse | Telescope data is accessible only on Expanse |
 | [UCSD Network Telescope](https://github.com/CAIDA/nids-ucsdnt-expanse) | `UCSDNT` | SDSC Expanse | A credentialed archive, governed by a data-use agreement, that stays on Expanse |
 
 The codes are the ones published in
@@ -274,13 +274,13 @@ Both paths run the same notebook, but not the same amount of it:
 
 ## Running on SDSC Expanse
 
-The **UCSD Network Telescope** module (`UCSDNT`) is the one module that is not a JupyterHub module
-at all. It runs as a Slurm batch job on [SDSC Expanse](https://www.sdsc.edu/systems/expanse/),
-reading the credentialed FlowTuple archive that stays on that machine under CAIDA's data-use
-agreement. It needs an Expanse allocation, which an instructor obtains themselves, and it takes no
-spawner profile and no hub image.
+The two telescope modules, **Network Telescope Traffic** (`TELESCOPE`) and **UCSD Network
+Telescope** (`UCSDNT`), run on [SDSC Expanse](https://www.sdsc.edu/systems/expanse/), not on the
+hub: UCSD Network Telescope data is accessible only there. They need an Expanse allocation, which
+an instructor obtains themselves, and take no spawner profile and no hub image. `UCSDNT` runs as a
+Slurm batch job against the credentialed FlowTuple archive.
 
-None of the tooling here provisions Expanse. The module's own repository carries its job scripts;
+None of the tooling here provisions Expanse. Each module's own repository carries its instructions;
 what this repository records is its coordinates and pins, in
 [datasets/ucsdnt-expanse-flowtuple/](datasets/ucsdnt-expanse-flowtuple/).
 

@@ -211,12 +211,10 @@ key_repo = "nids-telescope-traffic-key"
 release = "later"           # the pcap samples are unpublished, and MaxMind GeoLite2 is gated
                             # behind an account and geo-restricted. Both are data-publication
                             # questions rather than compute ones.
-venue = ["nrp"]
-status = "active"
-check = "00-environment-check.ipynb"
-profile = true
-# Read from the assignment's own README, which requires >=16 GB and recommends 24. The one
-# memory envelope here that is measured rather than estimated.
+venue = ["expanse"]         # telescope data is accessible only on SDSC Expanse
+status = "offsite"          # runs off the NRP hub entirely, so it needs no spawner profile
+check = ""
+# Read from the assignment's own README, which requires >=16 GB and recommends 24.
 memory = { guarantee = "16Gi", limit = "24Gi", verified = true }
 
 [TELESCOPE.environment]

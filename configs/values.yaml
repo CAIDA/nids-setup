@@ -99,8 +99,8 @@ ingress:
 
 # ---------------------------------------------------------------------------
 # Single-user servers: one shared image, one profile per assignment. Sizes marked
-# (*) are estimates — right-size against real runs. Telescope's 16/24Gi is the
-# only value stated by a assignment (its README/notebook: "at least 16GB, recommend 24").
+# (*) are estimates — right-size against real runs. The telescope modules run on
+# SDSC Expanse, not here, so they have no profile.
 # ---------------------------------------------------------------------------
 singleuser:
   # Optional: NRP has both amd64 and arm64 nodes, and the image is built for a single
@@ -135,11 +135,6 @@ singleuser:
       kubespawner_override:
         mem_guarantee: 4G     # (*) estimate — holds a full RIB prefix->ASN map in RAM
         mem_limit: 8G         # (*)
-    - display_name: "NIDS - Telescope Traffic (24 GB)"
-      description: "Anonymized /16 telescope PCAPs; GeoLite2 + BGP enrichment."
-      kubespawner_override:
-        mem_guarantee: 16G    # authoritative: assignment requires >= 16 GB
-        mem_limit: 24G        # recommended
     - display_name: "NIDS - DNS Ecosystem (Spark)"
       description: "OpenINTEL forward-DNS Parquet over S3A; Spark in local mode."
       kubespawner_override:
