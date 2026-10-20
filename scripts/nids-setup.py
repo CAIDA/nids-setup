@@ -1127,6 +1127,69 @@ def prep_inventory(code, assignment, root):
     return lines, problems
 
 
+# Pins a notebook repeats as a literal constant, which the registry cannot reach: dataset
+# id -> (the constant, the pin it must equal). A mismatch shows up nowhere else -- the key
+# and the student notebook each run fine and simply grade a different vintage.
+NOTEBOOK_PINS = {
+    "caida-as2org": ("AS2ORG_SERIAL", "serial"),
+}
+
+
+def notebook_constants(path, name):
+    """Every `NAME = "value"` a notebook's code cells assign, as a list of values."""
+    pattern = re.compile(rf"^\s*{re.escape(name)}\s*=\s*[\"']([^\"']*)[\"']", re.M)
+    try:
+        cells = json.loads(path.read_text(encoding="utf-8")).get("cells", [])
+    except (OSError, ValueError):
+        return []
+    found = []
+    for cell in cells:
+        if cell.get("cell_type") != "code":
+            continue
+        source = cell.get("source", "")
+        found += pattern.findall("".join(source) if isinstance(source, list) else source)
+    return found
+
+
+def prep_pins(assignment, root, datasets):
+    """(b, continued) Do the notebooks' literal pins match the registry's?
+
+    `dataset.toml` pins the as2org serial and four notebooks repeat it as AS2ORG_SERIAL.
+    Nothing else compares them, so a pin change that misses one copy surfaces only as a
+    quietly wrong graded figure. A repo that is not cloned is skipped here: the inventory
+    check above has already reported it.
+    """
+    lines, problems = [], 0
+    for entry in assignment.datasets:
+        dataset = datasets.get(entry["id"])
+        if dataset is None or dataset.id not in NOTEBOOK_PINS:
+            continue
+        constant, pin = NOTEBOOK_PINS[dataset.id]
+        values = dict(dataset.defaults)
+        values.update(assignment.pins_for(dataset.id))
+        expected = values.get(pin)
+        for repo in (assignment.repo, assignment.key_repo):
+            path = root / repo if repo else None
+            if not (path and path.is_dir()):
+                continue
+            seen = {f: notebook_constants(path / f, constant)
+                    for f in sorted(repo_inventory(path)) if f.endswith(".ipynb")}
+            seen = {f: v for f, v in seen.items() if v}
+            wrong = {f: v for f, v in seen.items() if any(x != expected for x in v)}
+            if wrong:
+                problems += 1
+                lines.append(f"[FAIL] {repo}: {constant} disagrees with {dataset.id}'s "
+                             f"{pin} ({expected}):")
+                lines.extend(f"         {f}: {', '.join(v)}" for f, v in wrong.items())
+            elif seen:
+                lines.append(f"[ ok ] {repo}: {constant} = {expected}, matching "
+                             f"{dataset.id}'s {pin}")
+            else:
+                lines.append(f"[warn] {repo}: no notebook sets {constant} -- cannot confirm "
+                             f"it reads {dataset.id} {pin} {expected}")
+    return lines, problems
+
+
 def checker_python(args=None):
     """The interpreter to run check-datasets.py in: the built environment when there is one.
 
@@ -1213,6 +1276,7 @@ def cmd_prep(args):
                 if not codes or code in codes}
     if not selected:
         raise SystemExit("no modules matched")
+    datasets = nids_registry.load_datasets()
 
     print(f"root:    {root}")
     print(f"modules: {', '.join(selected)}\n")
@@ -1253,6 +1317,9 @@ def cmd_prep(args):
 
         print("\n3/4  key repo against student repo")
         lines, bad = prep_inventory(code, assignment, root)
+        problems += bad
+        unchecked += report(lines)
+        lines, bad = prep_pins(assignment, root, datasets)
         problems += bad
         unchecked += report(lines)
 
@@ -1384,8 +1451,10 @@ def main(argv=None):
                            help="the environment to run in (default: <nids-setup>/.venv)")
             p.add_argument("--python", metavar="EXE",
                            help="interpreter to run the notebooks with, instead of --path's")
-            p.add_argument("--timeout", type=int, default=900, metavar="SECONDS",
-                           help="per-notebook time limit (default: 900)")
+            # Sized from the slowest hub run, not the typical one: the IRR key takes
+            # about 25 min (1,508 s) at 8 GB and DNS about 15 min (879 s).
+            p.add_argument("--timeout", type=int, default=2700, metavar="SECONDS",
+                           help="per-notebook time limit (default: 2700)")
             p.add_argument("--dry-run", action="store_true",
                            help="print which notebook each module would run, run nothing")
         if name == "prep":

@@ -2,7 +2,7 @@
 rem One command to get a NIDS assignment running, on Windows.
 rem
 rem   setup.cmd --local            on your own machine, using public data
-rem   setup.cmd --local --modules ASN,BGP
+rem   setup.cmd --local --assignment BGP
 rem
 rem A launcher, nothing more: every option is passed straight to
 rem scripts\nids-setup.py setup, which is the same code setup.sh runs on

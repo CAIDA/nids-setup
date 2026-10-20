@@ -179,7 +179,7 @@ git clone https://github.com/CAIDA/nids-dns-ecosystem-key.git
 |---|---|---|
 | `nids-asn-introduction-key` | default / 8 GB | seconds |
 | `nids-bgp-control-plane-key` | default / 8 GB | about 4 min |
-| `nids-irr-rpki-whois-key` | default / **16 GB** — it runs out of memory at 8 GB | about 17 min |
+| `nids-irr-rpki-whois-key` | default / 8 GB | about 25 min |
 | `nids-iyp-key` | default / 8 GB | under a minute |
 | `nids-dns-ecosystem-key` | **`Pyspark`** / 8 GB | about 15 min |
 | `nids-itdk-key` | needs a reachable Postgres and `db_credentials.env` next to the notebook | — |

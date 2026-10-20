@@ -3,7 +3,7 @@
 #
 #   ./setup.sh --local            on your own machine, using public data
 #   ./setup.sh --nrp              on NRP's JupyterHub, using the in-cluster mirror
-#   ./setup.sh --local --modules ASN,BGP
+#   ./setup.sh --local --assignment BGP
 #
 # A launcher, nothing more: every option is passed straight to
 # `scripts/nids-setup.py setup`, which is where the work happens and which
